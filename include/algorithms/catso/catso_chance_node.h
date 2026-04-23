@@ -27,6 +27,7 @@ namespace mcts {
             int num_backups;
             double mean_value;
             std::shared_ptr<StateDistr> next_state_distr;
+            std::string selected_observation_key;
 
             int n_atoms;
             double q_min;

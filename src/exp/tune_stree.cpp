@@ -125,6 +125,26 @@ namespace {
         double stddev;
     };
 
+    static string csv_escape(const string& value) {
+        if (value.find_first_of(",\"\n\r") == string::npos) {
+            return value;
+        }
+
+        string escaped;
+        escaped.reserve(value.size() + 2);
+        escaped.push_back('"');
+        for (char ch : value) {
+            if (ch == '"') {
+                escaped += "\"\"";
+            }
+            else {
+                escaped.push_back(ch);
+            }
+        }
+        escaped.push_back('"');
+        return escaped;
+    }
+
     static EvalStats evaluate_tree(
         shared_ptr<const mcts::MctsEnv> env,
         shared_ptr<const mcts::MctsDNode> root,
@@ -392,7 +412,7 @@ int main(int argc, char** argv) {
             pool->run_trials(total_trials, numeric_limits<double>::max(), true);
 
             auto stats = evaluate_tree(env, root, depth, eval_rollouts, threads, seed + 777);
-            out << "stree," << cand.algo << "," << cand.config << "," << run
+            out << "stree," << cand.algo << "," << csv_escape(cand.config) << "," << run
                 << "," << stats.mean << "," << stats.stddev << "\n";
 
             auto& a = agg[cand.algo][cand.config];

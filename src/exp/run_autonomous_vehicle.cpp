@@ -18,6 +18,7 @@
 #include <cmath>
 #include <fstream>
 #include <functional>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -285,19 +286,9 @@ namespace {
             }
         }
 
-        auto catso_root = dynamic_pointer_cast<const mcts::CatsoDNode>(root);
-        if (catso_root != nullptr && catso_root->has_child_node(recommended_action)) {
-            const double estimated_recommended_cvar =
-                catso_root->get_child_node(recommended_action)->get_cvar_value();
-            metrics.cvar_regret = root_solution.optimal_cvar - estimated_recommended_cvar;
-            return metrics;
-        }
-
-        auto uct_root = dynamic_pointer_cast<const mcts::UctDNode>(root);
-        if (uct_root != nullptr && uct_root->has_child_node(recommended_action)) {
-            const double estimated_recommended_mean =
-                uct_root->get_child_node(recommended_action)->get_mean_value();
-            metrics.cvar_regret = root_solution.optimal_cvar - estimated_recommended_mean;
+        const auto action_cvar_it = root_solution.action_cvars.find(recommended_action_id);
+        if (action_cvar_it != root_solution.action_cvars.end()) {
+            metrics.cvar_regret = root_solution.optimal_cvar - action_cvar_it->second;
         }
 
         return metrics;
@@ -386,6 +377,7 @@ int main(int argc, char** argv) {
     map<pair<string, int>, SummaryAccumulator> summary_by_algo_and_trial;
 
     ofstream out("results_autonomous_vehicle.csv", ios::out | ios::trunc);
+    out << setprecision(17);
     out << "env,algorithm,run,trial,mc_mean,mc_stddev,cvar_regret,optimal_action_hit,catastrophic_count\n";
 
     cout << "[exp] AutonomousVehicle"
@@ -455,6 +447,7 @@ int main(int argc, char** argv) {
     }
 
     ofstream summary_out("results_autonomous_vehicle_summary.csv", ios::out | ios::trunc);
+    summary_out << setprecision(17);
     summary_out << "env,algorithm,trial,mc_mean,mc_stddev,cvar_regret,optimal_action_prob,catastrophic_count\n";
     for (const auto& [algo_trial, summary] : summary_by_algo_and_trial) {
         const string& algo = algo_trial.first;

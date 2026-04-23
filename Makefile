@@ -43,6 +43,10 @@ TUNE_TAXI_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(TUNE_TAXI_SOURCES))
 TUNE_STREE_SOURCES = src/exp/tune_stree.cpp
 TUNE_STREE_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(TUNE_STREE_SOURCES))
 
+# Parameter tuning main for BettingGame
+TUNE_BETTINGGAME_SOURCES = src/exp/tune_bettinggame.cpp
+TUNE_BETTINGGAME_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(TUNE_BETTINGGAME_SOURCES))
+
 # FrozenLake experiment with tuned parameters
 RUN_SOURCES = src/exp/run_frozenlake.cpp
 RUN_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(RUN_SOURCES))
@@ -109,6 +113,7 @@ TARGET_MCTS_TUNE = mcts-tune-frozenlake
 TARGET_MCTS_TUNE_SAILING = mcts-tune-sailing
 TARGET_MCTS_TUNE_TAXI = mcts-tune-taxi
 TARGET_MCTS_TUNE_STREE = mcts-tune-stree
+TARGET_MCTS_TUNE_BETTINGGAME = mcts-tune-bettinggame
 TARGET_MCTS_RUN = mcts-run-frozenlake
 TARGET_MCTS_RUN_SAILING = mcts-run-sailing
 TARGET_MCTS_RUN_TAXI = mcts-run-taxi
@@ -178,6 +183,11 @@ $(TUNE_TAXI_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 
 # Build synthetic tree tuner object files rule
 $(TUNE_STREE_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) -c -o $@ $<
+
+# Build betting game tuner object files rule
+$(TUNE_BETTINGGAME_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
 	$(CXX) $(CPPFLAGS) -c -o $@ $<
 
@@ -281,6 +291,10 @@ $(TARGET_MCTS_TUNE_TAXI): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(TUNE_TAXI_OBJECTS)
 $(TARGET_MCTS_TUNE_STREE): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(TUNE_STREE_OBJECTS)
 	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
 
+# Build BettingGame tuner
+$(TARGET_MCTS_TUNE_BETTINGGAME): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(TUNE_BETTINGGAME_OBJECTS)
+	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
+
 # Build FrozenLake experiment with tuned parameters
 $(TARGET_MCTS_RUN): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(RUN_OBJECTS)
 	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
@@ -358,6 +372,7 @@ clean:
 	@[ -f $(TARGET_MCTS_TUNE_SAILING) ] && @rm $(TARGET_MCTS_TUNE_SAILING) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_TUNE_TAXI) ] && @rm $(TARGET_MCTS_TUNE_TAXI) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_TUNE_STREE) ] && @rm $(TARGET_MCTS_TUNE_STREE) > /dev/null 2> /dev/null || :
+	@[ -f $(TARGET_MCTS_TUNE_BETTINGGAME) ] && @rm $(TARGET_MCTS_TUNE_BETTINGGAME) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_RUN) ] && @rm $(TARGET_MCTS_RUN) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_RUN_SAILING) ] && @rm $(TARGET_MCTS_RUN_SAILING) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_RUN_TAXI) ] && @rm $(TARGET_MCTS_RUN_TAXI) > /dev/null 2> /dev/null || :
@@ -376,4 +391,4 @@ clean:
 #####
 # Phony targets, so make knows when a target isn't producing a corresponding output file of same name
 #####
-.PHONY: clean $(TARGET_MCTS) $(TARGET_MCTS_TUNE) $(TARGET_MCTS_TUNE_SAILING) $(TARGET_MCTS_TUNE_TAXI) $(TARGET_MCTS_TUNE_STREE) $(TARGET_MCTS_RUN) $(TARGET_MCTS_RUN_SAILING) $(TARGET_MCTS_RUN_TAXI) $(TARGET_MCTS_RUN_BETTINGGAME) $(TARGET_MCTS_RUN_RISKY_SHORTCUT_GRIDWORLD) $(TARGET_MCTS_RUN_AUTONOMOUS_VEHICLE) $(TARGET_MCTS_RUN_STREE) $(TARGET_MCTS_VarDE_DBG) $(TARGET_MCTS_DENTS_DBG) $(TARGET_MCTS_VarDE_DBG_SAILING) $(TARGET_MCTS_DENTS_DBG_SAILING) $(TARGET_MCTS_VarDE_DBG_TAXI) $(TARGET_MCTS_DENTS_DBG_TAXI) $(TARGET_MCTS_VarDE_DBG_STREE) $(TARGET_MCTS_DENTS_DBG_STREE)
+.PHONY: clean $(TARGET_MCTS) $(TARGET_MCTS_TUNE) $(TARGET_MCTS_TUNE_SAILING) $(TARGET_MCTS_TUNE_TAXI) $(TARGET_MCTS_TUNE_STREE) $(TARGET_MCTS_TUNE_BETTINGGAME) $(TARGET_MCTS_RUN) $(TARGET_MCTS_RUN_SAILING) $(TARGET_MCTS_RUN_TAXI) $(TARGET_MCTS_RUN_BETTINGGAME) $(TARGET_MCTS_RUN_RISKY_SHORTCUT_GRIDWORLD) $(TARGET_MCTS_RUN_AUTONOMOUS_VEHICLE) $(TARGET_MCTS_RUN_STREE) $(TARGET_MCTS_VarDE_DBG) $(TARGET_MCTS_DENTS_DBG) $(TARGET_MCTS_VarDE_DBG_SAILING) $(TARGET_MCTS_DENTS_DBG_SAILING) $(TARGET_MCTS_VarDE_DBG_TAXI) $(TARGET_MCTS_DENTS_DBG_TAXI) $(TARGET_MCTS_VarDE_DBG_STREE) $(TARGET_MCTS_DENTS_DBG_STREE)

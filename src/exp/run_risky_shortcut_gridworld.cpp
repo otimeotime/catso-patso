@@ -17,6 +17,7 @@
 #include <cmath>
 #include <fstream>
 #include <functional>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -284,19 +285,9 @@ namespace {
             }
         }
 
-        auto catso_root = dynamic_pointer_cast<const mcts::CatsoDNode>(root);
-        if (catso_root != nullptr && catso_root->has_child_node(recommended_action)) {
-            const double estimated_recommended_cvar =
-                catso_root->get_child_node(recommended_action)->get_cvar_value();
-            metrics.cvar_regret = root_solution.optimal_cvar - estimated_recommended_cvar;
-            return metrics;
-        }
-
-        auto uct_root = dynamic_pointer_cast<const mcts::UctDNode>(root);
-        if (uct_root != nullptr && uct_root->has_child_node(recommended_action)) {
-            const double estimated_recommended_mean =
-                uct_root->get_child_node(recommended_action)->get_mean_value();
-            metrics.cvar_regret = root_solution.optimal_cvar - estimated_recommended_mean;
+        const auto action_cvar_it = root_solution.action_cvars.find(recommended_action_id);
+        if (action_cvar_it != root_solution.action_cvars.end()) {
+            metrics.cvar_regret = root_solution.optimal_cvar - action_cvar_it->second;
         }
 
         return metrics;
@@ -322,7 +313,7 @@ namespace {
             args.max_depth = max_depth;
             args.mcts_mode = false;
             args.n_atoms = 100;
-            args.optimism_constant = 1.5;
+            args.optimism_constant = 8.0;
             args.power_mean_exponent = 2.0;
             args.cvar_tau = cvar_tau;
             args.seed = seed;
@@ -336,7 +327,7 @@ namespace {
             args.max_depth = max_depth;
             args.mcts_mode = false;
             args.max_particles = 100;
-            args.optimism_constant = 1.5;
+            args.optimism_constant = 8.0;
             args.power_mean_exponent = 2.0;
             args.cvar_tau = cvar_tau;
             args.seed = seed;
@@ -354,13 +345,13 @@ int main(int argc, char** argv) {
     (void)argv;
 
     const int grid_size = 4;
-    const double slip_prob = 0.10;
-    const double wind_prob = 0.20;
+    const double slip_prob = 0.40;
+    const double wind_prob = 0.70;
     const double step_cost = -1.0;
     const double goal_reward = 50.0;
     const double cliff_penalty = -100.0;
     const int max_steps = 40;
-    const double cvar_tau = 0.05;
+    const double cvar_tau = 0.25;
     const int horizon = max_steps;
     const int eval_rollouts = 200;
     const int runs = 3;
@@ -388,6 +379,7 @@ int main(int argc, char** argv) {
     map<pair<string, int>, SummaryAccumulator> summary_by_algo_and_trial;
 
     ofstream out("results_risky_shortcut_gridworld.csv", ios::out | ios::trunc);
+    out << setprecision(17);
     out << "env,algorithm,run,trial,mc_mean,mc_stddev,cvar_regret,optimal_action_hit,catastrophic_count\n";
 
     cout << "[exp] RiskyShortcutGridworld"
@@ -457,6 +449,7 @@ int main(int argc, char** argv) {
     }
 
     ofstream summary_out("results_risky_shortcut_gridworld_summary.csv", ios::out | ios::trunc);
+    summary_out << setprecision(17);
     summary_out << "env,algorithm,trial,mc_mean,mc_stddev,cvar_regret,optimal_action_prob,catastrophic_count\n";
     for (const auto& [algo_trial, summary] : summary_by_algo_and_trial) {
         const string& algo = algo_trial.first;

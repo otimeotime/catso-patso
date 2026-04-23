@@ -1,19 +1,17 @@
 #include "env/betting_game_env.h"
 
-#include "algorithms/catso/catso_chance_node.h"
 #include "algorithms/catso/catso_decision_node.h"
 #include "algorithms/catso/catso_manager.h"
 #include "algorithms/catso/patso_decision_node.h"
 #include "algorithms/catso/patso_manager.h"
-#include "algorithms/uct/uct_chance_node.h"
 #include "algorithms/uct/uct_decision_node.h"
 #include "algorithms/uct/uct_manager.h"
 
 #include "mc_eval.h"
 #include "mcts.h"
 #include "mcts_env_context.h"
-#include "exp/manager_config_printer.h"
 
+#include <chrono>
 #include <cmath>
 #include <fstream>
 #include <functional>
@@ -22,6 +20,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -36,6 +35,7 @@ namespace {
     struct Candidate {
         string algo;
         string config;
+        double eval_tau;
         function<pair<shared_ptr<mcts::MctsManager>, shared_ptr<mcts::MctsDNode>>(
             shared_ptr<mcts::MctsEnv> env,
             shared_ptr<const mcts::State> init_state,
@@ -82,15 +82,62 @@ namespace {
         double optimal_action_hit;
     };
 
-    struct SummaryAccumulator {
+    struct Aggregate {
         int count = 0;
-        int regret_count = 0;
         double sum_mc_mean = 0.0;
         double sum_mc_stddev = 0.0;
         double sum_cvar_regret = 0.0;
         double sum_optimal_action_hit = 0.0;
         double sum_catastrophic_count = 0.0;
     };
+
+    static string csv_escape(const string& value) {
+        if (value.find_first_of(",\"\n\r") == string::npos) {
+            return value;
+        }
+
+        string escaped;
+        escaped.reserve(value.size() + 2);
+        escaped.push_back('"');
+        for (char ch : value) {
+            if (ch == '"') {
+                escaped += "\"\"";
+            }
+            else {
+                escaped.push_back(ch);
+            }
+        }
+        escaped.push_back('"');
+        return escaped;
+    }
+
+    static void run_trials_with_progress(
+        mcts::MctsPool& pool,
+        int total_trials,
+        int batch_trials,
+        const string& label)
+    {
+        const int actual_batch_trials = max(1, min(batch_trials, total_trials));
+        int completed_trials = 0;
+        auto start_time = chrono::steady_clock::now();
+
+        while (completed_trials < total_trials) {
+            const int trials_to_add = min(actual_batch_trials, total_trials - completed_trials);
+            pool.run_trials(trials_to_add, numeric_limits<double>::max(), true);
+            completed_trials += trials_to_add;
+
+            const double progress = 100.0 * static_cast<double>(completed_trials) / static_cast<double>(total_trials);
+            const double elapsed_seconds =
+                chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now() - start_time).count();
+
+            ostringstream oss;
+            oss << "    " << label
+                << " trials " << completed_trials << "/" << total_trials
+                << " (" << fixed << setprecision(1) << progress << "%, "
+                << setprecision(2) << elapsed_seconds << "s)";
+            cout << oss.str() << endl;
+        }
+    }
 
     double compute_lower_tail_cvar(const ReturnDistribution& distribution, double tau) {
         if (distribution.empty()) {
@@ -295,10 +342,7 @@ namespace {
         const int recommended_action_id =
             static_pointer_cast<const mcts::IntAction>(recommended_action)->action;
 
-        BettingGameMetrics metrics{
-            numeric_limits<double>::quiet_NaN(),
-            0.0
-        };
+        BettingGameMetrics metrics{numeric_limits<double>::quiet_NaN(), 0.0};
 
         for (int optimal_action_id : root_solution.optimal_actions) {
             if (recommended_action_id == optimal_action_id) {
@@ -315,48 +359,80 @@ namespace {
         return metrics;
     }
 
-    static vector<Candidate> build_candidates(double cvar_tau) {
+    static vector<Candidate> build_candidates(double default_eval_tau) {
         vector<Candidate> cands;
+        const vector<double> tau_values = {0.05, 0.1, 0.2, 0.25};
 
-        cands.push_back({"UCT", "bias=auto,epsilon=0.1", [](auto env, auto init_state, int max_depth, int seed) {
-            mcts::UctManagerArgs args(env);
-            args.max_depth = max_depth;
-            args.mcts_mode = false;
-            args.bias = mcts::UctManagerArgs::USE_AUTO_BIAS;
-            args.epsilon_exploration = 0.1;
-            args.seed = seed;
-            auto mgr = make_shared<mcts::UctManager>(args);
-            auto root = make_shared<mcts::UctDNode>(mgr, init_state, 0, 0);
-            return make_pair(static_pointer_cast<mcts::MctsManager>(mgr), static_pointer_cast<mcts::MctsDNode>(root));
-        }});
+        for (double bias : {mcts::UctManagerArgs::USE_AUTO_BIAS, 2.0, 5.0, 10.0}) {
+            for (double eps : {0.05, 0.1, 0.2, 0.5}) {
+                string cfg = string("bias=") +
+                    (bias == mcts::UctManagerArgs::USE_AUTO_BIAS ? "auto" : to_string(bias)) +
+                    ",eps=" + to_string(eps);
+                cands.push_back({"UCT", cfg, default_eval_tau, [bias, eps](auto env, auto init_state, int max_depth, int seed) {
+                    mcts::UctManagerArgs args(env);
+                    args.max_depth = max_depth;
+                    args.mcts_mode = false;
+                    args.bias = bias;
+                    args.epsilon_exploration = eps;
+                    args.seed = seed;
+                    auto mgr = make_shared<mcts::UctManager>(args);
+                    auto root = make_shared<mcts::UctDNode>(mgr, init_state, 0, 0);
+                    return make_pair(static_pointer_cast<mcts::MctsManager>(mgr), static_pointer_cast<mcts::MctsDNode>(root));
+                }});
+            }
+        }
 
-        cands.push_back({"CATSO", "n_atoms=51,optimism=1.0,p=2.0,tau=" + to_string(cvar_tau), [cvar_tau](auto env, auto init_state, int max_depth, int seed) {
-            mcts::CatsoManagerArgs args(env);
-            args.max_depth = max_depth;
-            args.mcts_mode = false;
-            args.n_atoms = 51;
-            args.optimism_constant = 1.0;
-            args.power_mean_exponent = 2.0;
-            args.cvar_tau = cvar_tau;
-            args.seed = seed;
-            auto mgr = make_shared<mcts::CatsoManager>(args);
-            auto root = make_shared<mcts::CatsoDNode>(mgr, init_state, 0, 0);
-            return make_pair(static_pointer_cast<mcts::MctsManager>(mgr), static_pointer_cast<mcts::MctsDNode>(root));
-        }});
+        for (int n_atoms : {25, 51, 100}) {
+            for (double optimism : {2.0, 4.0, 8.0}) {
+                for (double p_mean : {1.0, 2.0, 4.0}) {
+                    for (double tau : tau_values) {
+                        string cfg = "atoms=" + to_string(n_atoms)
+                            + ",optimism=" + to_string(optimism)
+                            + ",p=" + to_string(p_mean)
+                            + ",tau=" + to_string(tau);
+                        cands.push_back({"CATSO", cfg, tau, [n_atoms, optimism, p_mean, tau](auto env, auto init_state, int max_depth, int seed) {
+                            mcts::CatsoManagerArgs args(env);
+                            args.max_depth = max_depth;
+                            args.mcts_mode = false;
+                            args.n_atoms = n_atoms;
+                            args.optimism_constant = optimism;
+                            args.power_mean_exponent = p_mean;
+                            args.cvar_tau = tau;
+                            args.seed = seed;
+                            auto mgr = make_shared<mcts::CatsoManager>(args);
+                            auto root = make_shared<mcts::CatsoDNode>(mgr, init_state, 0, 0);
+                            return make_pair(static_pointer_cast<mcts::MctsManager>(mgr), static_pointer_cast<mcts::MctsDNode>(root));
+                        }});
+                    }
+                }
+            }
+        }
 
-        cands.push_back({"PATSO", "max_particles=64,optimism=1.0,p=2.0,tau=" + to_string(cvar_tau), [cvar_tau](auto env, auto init_state, int max_depth, int seed) {
-            mcts::PatsoManagerArgs args(env);
-            args.max_depth = max_depth;
-            args.mcts_mode = false;
-            args.max_particles = 64;
-            args.optimism_constant = 1.0;
-            args.power_mean_exponent = 2.0;
-            args.cvar_tau = cvar_tau;
-            args.seed = seed;
-            auto mgr = make_shared<mcts::PatsoManager>(args);
-            auto root = make_shared<mcts::PatsoDNode>(mgr, init_state, 0, 0);
-            return make_pair(static_pointer_cast<mcts::MctsManager>(mgr), static_pointer_cast<mcts::MctsDNode>(root));
-        }});
+        for (int max_particles : {32, 64, 100}) {
+            for (double optimism : {2.0, 4.0, 8.0}) {
+                for (double p_mean : {1.0, 2.0, 4.0}) {
+                    for (double tau : tau_values) {
+                        string cfg = "particles=" + to_string(max_particles)
+                            + ",optimism=" + to_string(optimism)
+                            + ",p=" + to_string(p_mean)
+                            + ",tau=" + to_string(tau);
+                        cands.push_back({"PATSO", cfg, tau, [max_particles, optimism, p_mean, tau](auto env, auto init_state, int max_depth, int seed) {
+                            mcts::PatsoManagerArgs args(env);
+                            args.max_depth = max_depth;
+                            args.mcts_mode = false;
+                            args.max_particles = max_particles;
+                            args.optimism_constant = optimism;
+                            args.power_mean_exponent = p_mean;
+                            args.cvar_tau = tau;
+                            args.seed = seed;
+                            auto mgr = make_shared<mcts::PatsoManager>(args);
+                            auto root = make_shared<mcts::PatsoDNode>(mgr, init_state, 0, 0);
+                            return make_pair(static_pointer_cast<mcts::MctsManager>(mgr), static_pointer_cast<mcts::MctsDNode>(root));
+                        }});
+                    }
+                }
+            }
+        }
 
         return cands;
     }
@@ -373,15 +449,12 @@ int main(int argc, char** argv) {
     const double reward_normalisation = mcts::exp::BettingGameEnv::default_reward_normalisation;
     const double cvar_tau = 0.2;
     const int horizon = max_sequence_length;
+    const int total_trials = 100000;
     const int eval_rollouts = 200;
-    const int runs = 5;
-    const int threads = 8;
+    const int runs = 100;
+    const int threads = 16;
     const int base_seed = 4242;
-
-    vector<int> trial_counts;
-    for (int i = 1; i <= 30; ++i) {
-        trial_counts.push_back(i * 1000);
-    }
+    const int progress_batch_trials = min(total_trials, 10000);
 
     auto env = make_shared<mcts::exp::BettingGameEnv>(
         win_prob,
@@ -391,100 +464,114 @@ int main(int argc, char** argv) {
         reward_normalisation);
     auto init_state = env->get_initial_state_itfc();
     auto candidates = build_candidates(cvar_tau);
-    BettingGameCvarOracle oracle(env, cvar_tau);
-    const auto& root_solution = oracle.solve_state(env->get_initial_state());
-    map<pair<string,int>, SummaryAccumulator> summary_by_algo_and_trial;
-
-    ofstream out("results_bettinggame.csv", ios::out | ios::trunc);
-    out << setprecision(17);
-    out << "env,algorithm,run,trial,mc_mean,mc_stddev,cvar_regret,optimal_action_hit,catastrophic_count\n";
-
-    cout << "[exp] BettingGame"
-         << ", horizon=" << horizon
-         << ", win_prob=" << win_prob
-         << ", max_sequence_length=" << max_sequence_length
-         << ", initial_state=" << initial_state
-         << ", max_state_value=" << max_state_value
-         << ", cvar_tau=" << cvar_tau
-         << "\n";
-    cout << "  Algorithms: " << candidates.size()
-         << ", Runs: " << runs
-         << ", Trial counts: " << trial_counts.size()
-         << "\n";
-    cout << "  Root optimal CVaR: " << root_solution.optimal_cvar << "\n";
-
+    unordered_map<double, BettingGameCvarOracle> oracle_by_tau;
     for (const auto& cand : candidates) {
-        bool printed_config = false;
+        oracle_by_tau.emplace(cand.eval_tau, BettingGameCvarOracle(env, cand.eval_tau));
+    }
+    const auto& base_root_solution = oracle_by_tau.at(cvar_tau).solve_state(env->get_initial_state());
 
+    ofstream out("tune_bettinggame.csv", ios::out | ios::trunc);
+    out << setprecision(17);
+    out << "env,algorithm,config,eval_tau,run,mc_mean,mc_stddev,cvar_regret,optimal_action_hit,catastrophic_count\n";
+
+    map<string, map<double, unordered_map<string, Aggregate>>> agg;
+
+    cout << "[tune] BettingGame"
+         << ", horizon=" << horizon
+         << ", trials=" << total_trials
+         << ", default_eval_tau=" << cvar_tau
+         << ", runs=" << runs
+         << endl;
+    cout << "  Root optimal CVaR (default_eval_tau): " << base_root_solution.optimal_cvar << endl;
+    cout << "  Candidates: " << candidates.size()
+         << ", total searches=" << (static_cast<long long>(candidates.size()) * runs)
+         << ", total MCTS trials=" << (static_cast<long long>(candidates.size()) * runs * total_trials)
+         << ", progress_batch_trials=" << progress_batch_trials
+         << endl;
+
+    const int run_summary_stride = max(1, runs / 10);
+    for (size_t cand_idx = 0; cand_idx < candidates.size(); ++cand_idx) {
+        const auto& cand = candidates[cand_idx];
+        cout << "[" << (cand_idx + 1) << "/" << candidates.size() << "] "
+             << cand.algo << " cfg=" << cand.config
+             << ", eval_tau=" << cand.eval_tau << endl;
         for (int run = 0; run < runs; ++run) {
-            int seed = base_seed + 1000 * run + static_cast<int>(hash<string>{}(cand.algo) % 997);
-
+            int seed = base_seed + 1000 * run + static_cast<int>(hash<string>{}(cand.algo + cand.config) % 997);
             auto [mgr, root] = cand.make(env, init_state, horizon, seed);
-            if (!printed_config) {
-                const string runtime_config =
-                    mcts::exp::describe_manager_config(static_pointer_cast<const mcts::MctsManager>(mgr));
-                cout << "\nRunning " << cand.algo;
-                if (!runtime_config.empty()) {
-                    cout << " [" << runtime_config << "]";
-                }
-                else if (!cand.config.empty()) {
-                    cout << " [" << cand.config << "]";
-                }
-                cout << "...\n";
-                printed_config = true;
-            }
             auto pool = make_unique<mcts::MctsPool>(mgr, root, threads);
 
-            int trials_so_far = 0;
-            for (int target_trials : trial_counts) {
-                const int trials_to_add = target_trials - trials_so_far;
-                if (trials_to_add > 0) {
-                    pool->run_trials(trials_to_add, numeric_limits<double>::max(), true);
-                    trials_so_far = target_trials;
+            const bool print_trial_progress = (run == 0);
+            if (print_trial_progress) {
+                ostringstream label;
+                label << "[" << (cand_idx + 1) << "/" << candidates.size() << "] "
+                      << cand.algo << " run " << (run + 1) << "/" << runs;
+                run_trials_with_progress(*pool, total_trials, progress_batch_trials, label.str());
+            }
+            else {
+                pool->run_trials(total_trials, numeric_limits<double>::max(), true);
+            }
+
+            auto stats = evaluate_tree(env, root, horizon, eval_rollouts, threads, seed + 777);
+            const auto& root_solution = oracle_by_tau.at(cand.eval_tau).solve_state(env->get_initial_state());
+            auto metrics = evaluate_bettinggame_metrics(env, root, root_solution);
+            out << "bettinggame," << cand.algo << "," << csv_escape(cand.config) << "," << cand.eval_tau << "," << run
+                << "," << stats.mean << "," << stats.stddev
+                << "," << metrics.cvar_regret << "," << metrics.optimal_action_hit
+                << "," << stats.catastrophic_count << "\n";
+
+            Aggregate& a = agg[cand.algo][cand.eval_tau][cand.config];
+            a.count++;
+            a.sum_mc_mean += stats.mean;
+            a.sum_mc_stddev += stats.stddev;
+            a.sum_cvar_regret += metrics.cvar_regret;
+            a.sum_optimal_action_hit += metrics.optimal_action_hit;
+            a.sum_catastrophic_count += static_cast<double>(stats.catastrophic_count);
+
+            if (run == 0 || run + 1 == runs || ((run + 1) % run_summary_stride == 0)) {
+                cout << "    completed run " << (run + 1) << "/" << runs
+                     << " regret=" << metrics.cvar_regret
+                     << " hit=" << metrics.optimal_action_hit
+                     << " mean=" << stats.mean
+                     << endl;
+            }
+        }
+        cout << "  done " << cand.algo << " cfg=" << cand.config << endl;
+    }
+
+    cout << "\nBest configs (avg over runs per config, minimizing CVaR regret, grouped by eval_tau):\n";
+    cout << fixed << setprecision(6);
+    for (const auto& [algo, tau_map] : agg) {
+        for (const auto& [eval_tau, cfg_map] : tau_map) {
+            double best_avg_regret = numeric_limits<double>::infinity();
+            double best_avg_hit = -numeric_limits<double>::infinity();
+            string best_cfg;
+            for (const auto& [cfg, a] : cfg_map) {
+                if (a.count <= 0) {
+                    continue;
                 }
-
-                auto stats = evaluate_tree(env, root, horizon, eval_rollouts, threads, seed + 777);
-                auto metrics = evaluate_bettinggame_metrics(env, root, root_solution);
-                out << "bettinggame," << cand.algo << "," << run
-                    << "," << target_trials << "," << stats.mean << "," << stats.stddev
-                    << "," << metrics.cvar_regret << "," << metrics.optimal_action_hit
-                    << "," << stats.catastrophic_count << "\n";
-
-                SummaryAccumulator& summary = summary_by_algo_and_trial[{cand.algo, target_trials}];
-                summary.count++;
-                summary.sum_mc_mean += stats.mean;
-                summary.sum_mc_stddev += stats.stddev;
-                summary.sum_optimal_action_hit += metrics.optimal_action_hit;
-                summary.sum_catastrophic_count += static_cast<double>(stats.catastrophic_count);
-                if (!std::isnan(metrics.cvar_regret)) {
-                    summary.regret_count++;
-                    summary.sum_cvar_regret += metrics.cvar_regret;
+                const double avg_regret = a.sum_cvar_regret / static_cast<double>(a.count);
+                const double avg_hit = a.sum_optimal_action_hit / static_cast<double>(a.count);
+                if (avg_regret < best_avg_regret - 1e-15 ||
+                    (abs(avg_regret - best_avg_regret) <= 1e-15 && avg_hit > best_avg_hit))
+                {
+                    best_avg_regret = avg_regret;
+                    best_avg_hit = avg_hit;
+                    best_cfg = cfg;
                 }
             }
 
-            cout << "  " << cand.algo << " run " << (run + 1) << "/" << runs << " done\n";
+            if (!best_cfg.empty()) {
+                const Aggregate& a = cfg_map.at(best_cfg);
+                cout << "  " << algo
+                     << " (eval_tau=" << eval_tau << ")"
+                     << " -> avg_regret=" << (a.sum_cvar_regret / static_cast<double>(a.count))
+                     << ", avg_hit=" << (a.sum_optimal_action_hit / static_cast<double>(a.count))
+                     << ", avg_mean=" << (a.sum_mc_mean / static_cast<double>(a.count))
+                     << ", cfg=" << best_cfg << "\n";
+            }
         }
     }
 
-    ofstream summary_out("results_bettinggame_summary.csv", ios::out | ios::trunc);
-    summary_out << setprecision(17);
-    summary_out << "env,algorithm,trial,mc_mean,mc_stddev,cvar_regret,optimal_action_prob,catastrophic_count\n";
-    for (const auto& [algo_trial, summary] : summary_by_algo_and_trial) {
-        const string& algo = algo_trial.first;
-        const int trial = algo_trial.second;
-        const double mean_cvar_regret = (summary.regret_count > 0)
-            ? (summary.sum_cvar_regret / static_cast<double>(summary.regret_count))
-            : numeric_limits<double>::quiet_NaN();
-
-        summary_out << "bettinggame," << algo << "," << trial
-            << "," << (summary.sum_mc_mean / static_cast<double>(summary.count))
-            << "," << (summary.sum_mc_stddev / static_cast<double>(summary.count))
-            << "," << mean_cvar_regret
-            << "," << (summary.sum_optimal_action_hit / static_cast<double>(summary.count))
-            << "," << (summary.sum_catastrophic_count / static_cast<double>(summary.count))
-            << "\n";
-    }
-
-    cout << "\nResults written to results_bettinggame.csv and results_bettinggame_summary.csv\n";
+    cout << "Results written to tune_bettinggame.csv\n";
     return 0;
 }

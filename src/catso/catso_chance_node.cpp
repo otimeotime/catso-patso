@@ -34,12 +34,16 @@ namespace mcts {
             num_backups(0),
             mean_value(0.0),
             next_state_distr(mcts_manager->mcts_env->get_transition_distribution_itfc(state, action)),
+            selected_observation_key(),
             n_atoms(max(1, mcts_manager->n_atoms)),
             q_min(initial_q_min),
             q_max(initial_q_max),
             atoms(static_cast<size_t>(max(1, mcts_manager->n_atoms)), 0.0),
             dirichlet_counts(static_cast<size_t>(max(1, mcts_manager->n_atoms)), 1.0)
     {
+        stringstream ss;
+        ss << "catso_selected_observation_" << static_cast<const void*>(this);
+        selected_observation_key = ss.str();
         reset_atom_grid();
         mean_value = compute_mean_value();
     }
@@ -157,8 +161,10 @@ namespace mcts {
     }
 
     shared_ptr<const State> CatsoCNode::sample_observation(MctsEnvContext& ctx) {
-        (void)ctx;
-        return sample_observation_random();
+        shared_ptr<const State> sampled_state = sample_observation_random();
+        shared_ptr<const Observation> observation = static_pointer_cast<const Observation>(sampled_state);
+        ctx.put_value_const(selected_observation_key, observation);
+        return sampled_state;
     }
 
     void CatsoCNode::update_distribution(double q_sample) {
@@ -241,11 +247,21 @@ namespace mcts {
     {
         (void)trial_rewards_before_node;
         (void)trial_rewards_after_node;
+        (void)trial_cumulative_return_after_node;
         (void)trial_cumulative_return;
-        (void)ctx;
 
         num_backups++;
-        update_distribution(trial_cumulative_return_after_node);
+        shared_ptr<const Observation> observation = ctx.get_value_ptr_const<Observation>(selected_observation_key);
+        const double immediate_reward = mcts_manager->mcts_env->get_reward_itfc(state, action, observation);
+
+        double child_value = 0.0;
+        shared_ptr<const State> sampled_state = static_pointer_cast<const State>(observation);
+        if (has_child_node(sampled_state)) {
+            shared_ptr<CatsoDNode> child = get_child_node(sampled_state);
+            child_value = child->value_estimate;
+        }
+
+        update_distribution(immediate_reward + child_value);
         mean_value = compute_mean_value();
     }
 

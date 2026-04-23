@@ -14,10 +14,6 @@
 
 using namespace std;
 
-namespace {
-    constexpr double kPowerMeanShiftEps = 1e-9;
-}
-
 namespace mcts {
     CatsoDNode::CatsoDNode(
         shared_ptr<CatsoManager> mcts_manager,
@@ -60,15 +56,19 @@ namespace mcts {
         }
 
         double sum_weights = 0.0;
-        double min_value = numeric_limits<double>::infinity();
         double weighted_mean = 0.0;
+        double signed_power_sum = 0.0;
         for (const auto& pr : weighted_values) {
             if (pr.first <= 0.0) {
                 continue;
             }
             sum_weights += pr.first;
             weighted_mean += pr.first * pr.second;
-            min_value = min(min_value, pr.second);
+            if (pr.second >= 0.0) {
+                signed_power_sum += pr.first * pow(pr.second, exponent);
+            } else {
+                signed_power_sum -= pr.first * pow(-pr.second, exponent);
+            }
         }
 
         if (sum_weights <= 0.0) {
@@ -79,17 +79,11 @@ namespace mcts {
             return weighted_mean / sum_weights;
         }
 
-        const double offset = (min_value <= 0.0) ? (-min_value + kPowerMeanShiftEps) : 0.0;
-        double powered_sum = 0.0;
-        for (const auto& pr : weighted_values) {
-            if (pr.first <= 0.0) {
-                continue;
-            }
-            const double shifted_val = max(pr.second + offset, 0.0);
-            powered_sum += (pr.first / sum_weights) * pow(shifted_val, exponent);
+        const double normalised_power_sum = signed_power_sum / sum_weights;
+        if (abs(normalised_power_sum) <= 1e-18) {
+            return 0.0;
         }
-
-        return pow(max(powered_sum, 0.0), 1.0 / exponent) - offset;
+        return copysign(pow(abs(normalised_power_sum), 1.0 / exponent), normalised_power_sum);
     }
 
     double CatsoDNode::compute_power_mean_value() const {
@@ -109,7 +103,7 @@ namespace mcts {
 
             weighted_values.emplace_back(
                 static_cast<double>(child->num_visits),
-                opp_coeff * child->get_mean_value());
+                opp_coeff * child->get_cvar_value());
         }
         unlock_all_children();
 
