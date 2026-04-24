@@ -407,7 +407,7 @@ namespace {
             }
         }
 
-        for (int max_particles : {32, 64, 100}) {
+        for (int max_particles : {32, 64, 128}) {
             for (double optimism : {2.0, 4.0, 8.0}) {
                 for (double p_mean : {1.0, 2.0, 4.0}) {
                     for (double tau : tau_values) {
@@ -483,9 +483,9 @@ int main(int argc, char** argv) {
     const double reward_normalisation = mcts::exp::BettingGameEnv::default_reward_normalisation;
     const double cvar_tau = 0.2;
     const int horizon = max_sequence_length;
-    const int total_trials = 100000;
+    const int total_trials = 30000;
     const int eval_rollouts = 200;
-    const int runs = 100;
+    const int runs = 2;
     const int threads = 16;
     const int base_seed = 4242;
     const int progress_batch_trials = min(total_trials, 10000);
