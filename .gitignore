@@ -2,9 +2,10 @@
 .vscode
 .DS_Store
 
-# Go results/plots
-plots
+# Generated plots/results
+plots/
 results
+*.csv
 
 # Prerequisites
 *.d

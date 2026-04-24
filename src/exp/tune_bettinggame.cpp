@@ -21,6 +21,7 @@
 #include <map>
 #include <memory>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -31,6 +32,7 @@ using namespace std;
 namespace {
     constexpr double kCvarTolerance = 1e-12;
     constexpr double kCatastrophicBankrollThreshold = 1e-12;
+    constexpr double kDefaultOptimalActionRegretThreshold = 0.0;
 
     struct Candidate {
         string algo;
@@ -335,7 +337,8 @@ namespace {
     static BettingGameMetrics evaluate_bettinggame_metrics(
         shared_ptr<const mcts::exp::BettingGameEnv> env,
         shared_ptr<const mcts::MctsDNode> root,
-        const OptimalDistributionSolution& root_solution)
+        const OptimalDistributionSolution& root_solution,
+        double optimal_action_regret_threshold)
     {
         auto context = env->sample_context_itfc(env->get_initial_state_itfc());
         shared_ptr<const mcts::Action> recommended_action = root->recommend_action_itfc(*context);
@@ -344,16 +347,12 @@ namespace {
 
         BettingGameMetrics metrics{numeric_limits<double>::quiet_NaN(), 0.0};
 
-        for (int optimal_action_id : root_solution.optimal_actions) {
-            if (recommended_action_id == optimal_action_id) {
-                metrics.optimal_action_hit = 1.0;
-                break;
-            }
-        }
-
         const auto action_cvar_it = root_solution.action_cvars.find(recommended_action_id);
         if (action_cvar_it != root_solution.action_cvars.end()) {
             metrics.cvar_regret = root_solution.optimal_cvar - action_cvar_it->second;
+            if (metrics.cvar_regret <= optimal_action_regret_threshold + kCvarTolerance) {
+                metrics.optimal_action_hit = 1.0;
+            }
         }
 
         return metrics;
@@ -439,8 +438,43 @@ namespace {
 }
 
 int main(int argc, char** argv) {
-    (void)argc;
-    (void)argv;
+    double optimal_action_regret_threshold = kDefaultOptimalActionRegretThreshold;
+    for (int argi = 1; argi < argc; ++argi) {
+        const string arg = argv[argi];
+        if (arg == "--optimal-action-regret-threshold") {
+            if (argi + 1 >= argc) {
+                cerr << "Missing value for --optimal-action-regret-threshold\n";
+                cerr << "Usage: " << argv[0]
+                     << " [--optimal-action-regret-threshold <non-negative double>]\n";
+                return 1;
+            }
+
+            const string value = argv[++argi];
+            try {
+                optimal_action_regret_threshold = stod(value);
+            }
+            catch (const exception&) {
+                cerr << "Invalid value for --optimal-action-regret-threshold: " << value << "\n";
+                return 1;
+            }
+
+            if (!isfinite(optimal_action_regret_threshold) || optimal_action_regret_threshold < 0.0) {
+                cerr << "--optimal-action-regret-threshold must be a non-negative finite value\n";
+                return 1;
+            }
+        }
+        else if (arg == "--help" || arg == "-h") {
+            cout << "Usage: " << argv[0]
+                 << " [--optimal-action-regret-threshold <non-negative double>]\n";
+            return 0;
+        }
+        else {
+            cerr << "Unknown argument: " << arg << "\n";
+            cerr << "Usage: " << argv[0]
+                 << " [--optimal-action-regret-threshold <non-negative double>]\n";
+            return 1;
+        }
+    }
 
     const double win_prob = 0.8;
     const int max_sequence_length = 6;
@@ -480,6 +514,7 @@ int main(int argc, char** argv) {
          << ", horizon=" << horizon
          << ", trials=" << total_trials
          << ", default_eval_tau=" << cvar_tau
+         << ", optimal_action_regret_threshold=" << optimal_action_regret_threshold
          << ", runs=" << runs
          << endl;
     cout << "  Root optimal CVaR (default_eval_tau): " << base_root_solution.optimal_cvar << endl;
@@ -513,7 +548,11 @@ int main(int argc, char** argv) {
 
             auto stats = evaluate_tree(env, root, horizon, eval_rollouts, threads, seed + 777);
             const auto& root_solution = oracle_by_tau.at(cand.eval_tau).solve_state(env->get_initial_state());
-            auto metrics = evaluate_bettinggame_metrics(env, root, root_solution);
+            auto metrics = evaluate_bettinggame_metrics(
+                env,
+                root,
+                root_solution,
+                optimal_action_regret_threshold);
             out << "bettinggame," << cand.algo << "," << csv_escape(cand.config) << "," << cand.eval_tau << "," << run
                 << "," << stats.mean << "," << stats.stddev
                 << "," << metrics.cvar_regret << "," << metrics.optimal_action_hit

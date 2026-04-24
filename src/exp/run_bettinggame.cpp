@@ -22,6 +22,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -32,6 +33,7 @@ using namespace std;
 namespace {
     constexpr double kCvarTolerance = 1e-12;
     constexpr double kCatastrophicBankrollThreshold = 1e-12;
+    constexpr double kDefaultOptimalActionRegretThreshold = 0.0;
 
     struct Candidate {
         string algo;
@@ -288,7 +290,8 @@ namespace {
     static BettingGameMetrics evaluate_bettinggame_metrics(
         shared_ptr<const mcts::exp::BettingGameEnv> env,
         shared_ptr<const mcts::MctsDNode> root,
-        const OptimalDistributionSolution& root_solution)
+        const OptimalDistributionSolution& root_solution,
+        double optimal_action_regret_threshold)
     {
         auto context = env->sample_context_itfc(env->get_initial_state_itfc());
         shared_ptr<const mcts::Action> recommended_action = root->recommend_action_itfc(*context);
@@ -300,16 +303,12 @@ namespace {
             0.0
         };
 
-        for (int optimal_action_id : root_solution.optimal_actions) {
-            if (recommended_action_id == optimal_action_id) {
-                metrics.optimal_action_hit = 1.0;
-                break;
-            }
-        }
-
         const auto action_cvar_it = root_solution.action_cvars.find(recommended_action_id);
         if (action_cvar_it != root_solution.action_cvars.end()) {
             metrics.cvar_regret = root_solution.optimal_cvar - action_cvar_it->second;
+            if (metrics.cvar_regret <= optimal_action_regret_threshold + kCvarTolerance) {
+                metrics.optimal_action_hit = 1.0;
+            }
         }
 
         return metrics;
@@ -334,8 +333,8 @@ namespace {
             mcts::CatsoManagerArgs args(env);
             args.max_depth = max_depth;
             args.mcts_mode = false;
-            args.n_atoms = 51;
-            args.optimism_constant = 1.0;
+            args.n_atoms = 100;
+            args.optimism_constant = 4.0;
             args.power_mean_exponent = 2.0;
             args.cvar_tau = cvar_tau;
             args.seed = seed;
@@ -348,8 +347,8 @@ namespace {
             mcts::PatsoManagerArgs args(env);
             args.max_depth = max_depth;
             args.mcts_mode = false;
-            args.max_particles = 64;
-            args.optimism_constant = 1.0;
+            args.max_particles = 100;
+            args.optimism_constant = 4.0;
             args.power_mean_exponent = 2.0;
             args.cvar_tau = cvar_tau;
             args.seed = seed;
@@ -363,8 +362,43 @@ namespace {
 }
 
 int main(int argc, char** argv) {
-    (void)argc;
-    (void)argv;
+    double optimal_action_regret_threshold = kDefaultOptimalActionRegretThreshold;
+    for (int argi = 1; argi < argc; ++argi) {
+        const string arg = argv[argi];
+        if (arg == "--optimal-action-regret-threshold") {
+            if (argi + 1 >= argc) {
+                cerr << "Missing value for --optimal-action-regret-threshold\n";
+                cerr << "Usage: " << argv[0]
+                     << " [--optimal-action-regret-threshold <non-negative double>]\n";
+                return 1;
+            }
+
+            const string value = argv[++argi];
+            try {
+                optimal_action_regret_threshold = stod(value);
+            }
+            catch (const exception&) {
+                cerr << "Invalid value for --optimal-action-regret-threshold: " << value << "\n";
+                return 1;
+            }
+
+            if (!isfinite(optimal_action_regret_threshold) || optimal_action_regret_threshold < 0.0) {
+                cerr << "--optimal-action-regret-threshold must be a non-negative finite value\n";
+                return 1;
+            }
+        }
+        else if (arg == "--help" || arg == "-h") {
+            cout << "Usage: " << argv[0]
+                 << " [--optimal-action-regret-threshold <non-negative double>]\n";
+            return 0;
+        }
+        else {
+            cerr << "Unknown argument: " << arg << "\n";
+            cerr << "Usage: " << argv[0]
+                 << " [--optimal-action-regret-threshold <non-negative double>]\n";
+            return 1;
+        }
+    }
 
     const double win_prob = 0.8;
     const int max_sequence_length = 6;
@@ -374,12 +408,12 @@ int main(int argc, char** argv) {
     const double cvar_tau = 0.2;
     const int horizon = max_sequence_length;
     const int eval_rollouts = 200;
-    const int runs = 5;
+    const int runs = 2;
     const int threads = 8;
     const int base_seed = 4242;
 
     vector<int> trial_counts;
-    for (int i = 1; i <= 30; ++i) {
+    for (int i = 1; i <= 3; ++i) {
         trial_counts.push_back(i * 1000);
     }
 
@@ -406,6 +440,7 @@ int main(int argc, char** argv) {
          << ", initial_state=" << initial_state
          << ", max_state_value=" << max_state_value
          << ", cvar_tau=" << cvar_tau
+         << ", optimal_action_regret_threshold=" << optimal_action_regret_threshold
          << "\n";
     cout << "  Algorithms: " << candidates.size()
          << ", Runs: " << runs
@@ -444,7 +479,11 @@ int main(int argc, char** argv) {
                 }
 
                 auto stats = evaluate_tree(env, root, horizon, eval_rollouts, threads, seed + 777);
-                auto metrics = evaluate_bettinggame_metrics(env, root, root_solution);
+                auto metrics = evaluate_bettinggame_metrics(
+                    env,
+                    root,
+                    root_solution,
+                    optimal_action_regret_threshold);
                 out << "bettinggame," << cand.algo << "," << run
                     << "," << target_trials << "," << stats.mean << "," << stats.stddev
                     << "," << metrics.cvar_regret << "," << metrics.optimal_action_hit
