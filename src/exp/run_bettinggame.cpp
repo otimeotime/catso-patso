@@ -14,6 +14,7 @@
 #include "mcts_env_context.h"
 #include "exp/manager_config_printer.h"
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <functional>
@@ -31,11 +32,10 @@
 using namespace std;
 
 namespace {
-    constexpr double kCvarTolerance = 1e-12;
-    constexpr double kCatastrophicBankrollThreshold = 1e-12;
-    constexpr double kDefaultOptimalActionRegretThreshold = 0.0;
+    constexpr double kCvarTolerance = 1e-12; // Clamp the tau so that it does not go to zero (lower bound of tau)
+    constexpr double kDefaultOptimalActionRegretThreshold = 0.0; // Relaxation degree of optimal action 
 
-    struct Candidate {
+    struct Candidate { // Struct for 1 algorithm
         string algo;
         string config;
         function<pair<shared_ptr<mcts::MctsManager>, shared_ptr<mcts::MctsDNode>>(
@@ -45,15 +45,16 @@ namespace {
             int seed)> make;
     };
 
-    struct EvalStats {
+    struct EvalStats { // Struct to store 1 configuration result
         double mean;
         double stddev;
+        double cvar;
         int catastrophic_count;
     };
 
-    using ReturnDistribution = map<double, double>;
+    using ReturnDistribution = map<double, double>; // Return probability distribution
 
-    struct BettingGameStateKey {
+    struct BettingGameStateKey { // Struct for the game state (bankroll, time)
         double bankroll;
         int time;
 
@@ -62,7 +63,7 @@ namespace {
         }
     };
 
-    struct BettingGameStateKeyHash {
+    struct BettingGameStateKeyHash { // Hashing of Game state
         size_t operator()(const BettingGameStateKey& key) const {
             size_t seed = std::hash<double>{}(key.bankroll);
             seed ^= std::hash<int>{}(key.time) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
@@ -71,9 +72,9 @@ namespace {
     };
 
     struct OptimalDistributionSolution {
-        ReturnDistribution state_value_distribution;
-        unordered_map<int, ReturnDistribution> action_value_distributions;
-        unordered_map<int, double> action_cvars;
+        ReturnDistribution state_value_distribution; // distribution
+        unordered_map<int, ReturnDistribution> action_value_distributions; // Q(s,a) -> its distribution
+        unordered_map<int, double> action_cvars; // Dictionary (action -> its CVaR)
         vector<int> optimal_actions;
         int canonical_action = -1;
         double optimal_cvar = 0.0;
@@ -89,6 +90,7 @@ namespace {
         int regret_count = 0;
         double sum_mc_mean = 0.0;
         double sum_mc_stddev = 0.0;
+        double sum_mc_cvar = 0.0;
         double sum_cvar_regret = 0.0;
         double sum_optimal_action_hit = 0.0;
         double sum_catastrophic_count = 0.0;
@@ -125,6 +127,32 @@ namespace {
             const double mass_to_take = min(probability, remaining_mass);
             tail_sum += mass_to_take * value;
             cumulative_mass += probability;
+
+            if (cumulative_mass >= tail_mass) {
+                break;
+            }
+        }
+
+        return tail_sum / tail_mass;
+    }
+
+    double compute_empirical_lower_tail_cvar(vector<double> samples, double tau) {
+        if (samples.empty()) {
+            return 0.0;
+        }
+
+        sort(samples.begin(), samples.end());
+
+        const double tau_clamped = max(kCvarTolerance, min(tau, 1.0));
+        const double tail_mass = tau_clamped * static_cast<double>(samples.size());
+        double cumulative_mass = 0.0;
+        double tail_sum = 0.0;
+
+        for (double sample : samples) {
+            const double remaining_mass = max(0.0, tail_mass - cumulative_mass);
+            const double mass_to_take = min(1.0, remaining_mass);
+            tail_sum += mass_to_take * sample;
+            cumulative_mass += 1.0;
 
             if (cumulative_mass >= tail_mass) {
                 break;
@@ -223,7 +251,8 @@ namespace {
         int horizon,
         int rollouts,
         int threads,
-        int seed)
+        int seed,
+        double cvar_tau)
     {
         (void)threads;
 
@@ -239,6 +268,7 @@ namespace {
             int num_actions_taken = 0;
             double sample_return = 0.0;
             shared_ptr<const mcts::State> state = env->get_initial_state_itfc();
+            bool rollout_was_catastrophic = env->is_catastrophic_state_itfc(state);
             auto context_ptr = env->sample_context_itfc(state);
             mcts::MctsEnvContext& context = *context_ptr;
 
@@ -250,16 +280,16 @@ namespace {
                     env->sample_observation_distribution_itfc(action, next_state, eval_rng);
 
                 sample_return += env->get_reward_itfc(state, action, observation);
+                if (env->is_catastrophic_state_itfc(next_state)) {
+                    rollout_was_catastrophic = true;
+                }
                 policy.update_step(action, observation);
                 state = next_state;
                 num_actions_taken++;
             }
 
             sampled_returns.push_back(sample_return);
-
-            shared_ptr<const mcts::exp::BettingGameState> final_state =
-                static_pointer_cast<const mcts::exp::BettingGameState>(state);
-            if (final_state->bankroll <= kCatastrophicBankrollThreshold) {
+            if (rollout_was_catastrophic) {
                 catastrophic_count++;
             }
         }
@@ -284,7 +314,8 @@ namespace {
             stddev = sqrt(variance);
         }
 
-        return {mean, stddev, catastrophic_count};
+        const double cvar = compute_empirical_lower_tail_cvar(sampled_returns, cvar_tau);
+        return {mean, stddev, cvar, catastrophic_count};
     }
 
     static BettingGameMetrics evaluate_bettinggame_metrics(
@@ -334,7 +365,7 @@ namespace {
             args.max_depth = max_depth;
             args.mcts_mode = false;
             args.n_atoms = 100;
-            args.optimism_constant = 4.0;
+            args.optimism_constant = 2.0;
             args.power_mean_exponent = 2.0;
             args.cvar_tau = cvar_tau;
             args.seed = seed;
@@ -348,7 +379,7 @@ namespace {
             args.max_depth = max_depth;
             args.mcts_mode = false;
             args.max_particles = 100;
-            args.optimism_constant = 4.0;
+            args.optimism_constant = 2.0;
             args.power_mean_exponent = 2.0;
             args.cvar_tau = cvar_tau;
             args.seed = seed;
@@ -408,12 +439,12 @@ int main(int argc, char** argv) {
     const double cvar_tau = 0.2;
     const int horizon = max_sequence_length;
     const int eval_rollouts = 200;
-    const int runs = 2;
+    const int runs = 100;
     const int threads = 8;
     const int base_seed = 4242;
 
     vector<int> trial_counts;
-    for (int i = 1; i <= 3; ++i) {
+    for (int i = 1; i <= 100; ++i) {
         trial_counts.push_back(i * 1000);
     }
 
@@ -431,7 +462,7 @@ int main(int argc, char** argv) {
 
     ofstream out("results_bettinggame.csv", ios::out | ios::trunc);
     out << setprecision(17);
-    out << "env,algorithm,run,trial,mc_mean,mc_stddev,cvar_regret,optimal_action_hit,catastrophic_count\n";
+    out << "env,algorithm,run,trial,mc_mean,mc_stddev,mc_cvar,cvar_regret,optimal_action_hit,catastrophic_count\n";
 
     cout << "[exp] BettingGame"
          << ", horizon=" << horizon
@@ -478,7 +509,7 @@ int main(int argc, char** argv) {
                     trials_so_far = target_trials;
                 }
 
-                auto stats = evaluate_tree(env, root, horizon, eval_rollouts, threads, seed + 777);
+                auto stats = evaluate_tree(env, root, horizon, eval_rollouts, threads, seed + 777, cvar_tau);
                 auto metrics = evaluate_bettinggame_metrics(
                     env,
                     root,
@@ -486,6 +517,7 @@ int main(int argc, char** argv) {
                     optimal_action_regret_threshold);
                 out << "bettinggame," << cand.algo << "," << run
                     << "," << target_trials << "," << stats.mean << "," << stats.stddev
+                    << "," << stats.cvar
                     << "," << metrics.cvar_regret << "," << metrics.optimal_action_hit
                     << "," << stats.catastrophic_count << "\n";
 
@@ -493,6 +525,7 @@ int main(int argc, char** argv) {
                 summary.count++;
                 summary.sum_mc_mean += stats.mean;
                 summary.sum_mc_stddev += stats.stddev;
+                summary.sum_mc_cvar += stats.cvar;
                 summary.sum_optimal_action_hit += metrics.optimal_action_hit;
                 summary.sum_catastrophic_count += static_cast<double>(stats.catastrophic_count);
                 if (!std::isnan(metrics.cvar_regret)) {
@@ -507,7 +540,7 @@ int main(int argc, char** argv) {
 
     ofstream summary_out("results_bettinggame_summary.csv", ios::out | ios::trunc);
     summary_out << setprecision(17);
-    summary_out << "env,algorithm,trial,mc_mean,mc_stddev,cvar_regret,optimal_action_prob,catastrophic_count\n";
+    summary_out << "env,algorithm,trial,mc_mean,mc_stddev,mc_cvar,cvar_regret,optimal_action_prob,catastrophic_count\n";
     for (const auto& [algo_trial, summary] : summary_by_algo_and_trial) {
         const string& algo = algo_trial.first;
         const int trial = algo_trial.second;
@@ -518,6 +551,7 @@ int main(int argc, char** argv) {
         summary_out << "bettinggame," << algo << "," << trial
             << "," << (summary.sum_mc_mean / static_cast<double>(summary.count))
             << "," << (summary.sum_mc_stddev / static_cast<double>(summary.count))
+            << "," << (summary.sum_mc_cvar / static_cast<double>(summary.count))
             << "," << mean_cvar_regret
             << "," << (summary.sum_optimal_action_hit / static_cast<double>(summary.count))
             << "," << (summary.sum_catastrophic_count / static_cast<double>(summary.count))

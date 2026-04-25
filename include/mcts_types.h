@@ -133,6 +133,23 @@ namespace mcts {
             virtual std::string get_pretty_print_string() const;
     };
 
+    /**
+     * An implementation of state containing a 4 tuple of integers as the state.
+     */
+    class Int4TupleState : public State {
+        public:
+            std::tuple<int,int,int,int> state;
+
+            Int4TupleState(std::tuple<int,int,int,int> tpl) : state(tpl) {}
+            Int4TupleState(int first, int second, int third, int fourth)
+                : state(std::make_tuple(first, second, third, fourth)) {}
+            virtual ~Int4TupleState() = default;
+            virtual std::size_t hash() const;
+            bool equals(const Int4TupleState& other) const;
+            virtual bool equals_itfc(const Observation& other) const;
+            virtual std::string get_pretty_print_string() const;
+    };
+
 
 
     /**
@@ -202,6 +219,7 @@ namespace mcts {
     typedef std::unordered_map<std::shared_ptr<const IntState>,double> IntStateDistr;
     typedef std::unordered_map<std::shared_ptr<const IntPairState>,double> IntPairStateDistr;
     typedef std::unordered_map<std::shared_ptr<const Int3TupleState>,double> Int3TupleStateDistr;
+    typedef std::unordered_map<std::shared_ptr<const Int4TupleState>,double> Int4TupleStateDistr;
 
 
 

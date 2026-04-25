@@ -71,6 +71,38 @@ RUN_RISKY_SHORTCUT_GRIDWORLD_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(RUN_
 RUN_AUTONOMOUS_VEHICLE_SOURCES = src/exp/run_autonomous_vehicle.cpp
 RUN_AUTONOMOUS_VEHICLE_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(RUN_AUTONOMOUS_VEHICLE_SOURCES))
 
+# Thin Ice Frozen Lake Plus experiment
+RUN_THIN_ICE_FROZEN_LAKE_PLUS_SOURCES = src/exp/run_thin_ice_frozen_lake_plus.cpp
+RUN_THIN_ICE_FROZEN_LAKE_PLUS_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(RUN_THIN_ICE_FROZEN_LAKE_PLUS_SOURCES))
+
+# Overflow Queue experiment
+RUN_OVERFLOW_QUEUE_SOURCES = src/exp/run_overflow_queue.cpp
+RUN_OVERFLOW_QUEUE_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(RUN_OVERFLOW_QUEUE_SOURCES))
+
+# Gambler Jackpot experiment
+RUN_GAMBLER_JACKPOT_SOURCES = src/exp/run_gambler_jackpot.cpp
+RUN_GAMBLER_JACKPOT_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(RUN_GAMBLER_JACKPOT_SOURCES))
+
+# Risky Ladder experiment
+RUN_RISKY_LADDER_SOURCES = src/exp/run_risky_ladder.cpp
+RUN_RISKY_LADDER_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(RUN_RISKY_LADDER_SOURCES))
+
+# Two Path SSP Deceptive experiment
+RUN_TWO_PATH_SSP_DECEPTIVE_SOURCES = src/exp/run_two_path_ssp_deceptive.cpp
+RUN_TWO_PATH_SSP_DECEPTIVE_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(RUN_TWO_PATH_SSP_DECEPTIVE_SOURCES))
+
+# Laser Tag Safe Grid experiment
+RUN_LASER_TAG_SAFE_GRID_SOURCES = src/exp/run_laser_tag_safe_grid.cpp
+RUN_LASER_TAG_SAFE_GRID_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(RUN_LASER_TAG_SAFE_GRID_SOURCES))
+
+# River Swim Stochastic experiment
+RUN_RIVER_SWIM_STOCHASTIC_SOURCES = src/exp/run_river_swim_stochastic.cpp
+RUN_RIVER_SWIM_STOCHASTIC_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(RUN_RIVER_SWIM_STOCHASTIC_SOURCES))
+
+# Two Level Risky Treasure experiment
+RUN_TWO_LEVEL_RISKY_TREASURE_SOURCES = src/exp/run_two_level_risky_treasure.cpp
+RUN_TWO_LEVEL_RISKY_TREASURE_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(RUN_TWO_LEVEL_RISKY_TREASURE_SOURCES))
+
 # Synthetic Tree experiment with tuned parameters
 RUN_STREE_SOURCES = src/exp/run_stree.cpp
 RUN_STREE_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(RUN_STREE_SOURCES))
@@ -105,6 +137,7 @@ INCLUDES = -Iinclude/ -Isrc/ -I.
 
 CPPFLAGS = $(INCLUDES) -Wall -std=c++20
 CPPFLAGS_DEBUG = -g
+DEPFLAGS = -MMD -MP
 
 LDFLAGS = -lpthread
 
@@ -120,6 +153,14 @@ TARGET_MCTS_RUN_TAXI = mcts-run-taxi
 TARGET_MCTS_RUN_BETTINGGAME = mcts-run-bettinggame
 TARGET_MCTS_RUN_RISKY_SHORTCUT_GRIDWORLD = mcts-run-risky-shortcut-gridworld
 TARGET_MCTS_RUN_AUTONOMOUS_VEHICLE = mcts-run-autonomous-vehicle
+TARGET_MCTS_RUN_THIN_ICE_FROZEN_LAKE_PLUS = mcts-run-thin-ice-frozen-lake-plus
+TARGET_MCTS_RUN_OVERFLOW_QUEUE = mcts-run-overflow-queue
+TARGET_MCTS_RUN_GAMBLER_JACKPOT = mcts-run-gambler-jackpot
+TARGET_MCTS_RUN_RISKY_LADDER = mcts-run-risky-ladder
+TARGET_MCTS_RUN_TWO_PATH_SSP_DECEPTIVE = mcts-run-two-path-ssp-deceptive
+TARGET_MCTS_RUN_LASER_TAG_SAFE_GRID = mcts-run-laser-tag-safe-grid
+TARGET_MCTS_RUN_RIVER_SWIM_STOCHASTIC = mcts-run-river-swim-stochastic
+TARGET_MCTS_RUN_TWO_LEVEL_RISKY_TREASURE = mcts-run-two-level-risky-treasure
 TARGET_MCTS_RUN_STREE = mcts-run-stree
 TARGET_MCTS_VarDE_DBG = mcts-debug-varde
 TARGET_MCTS_DENTS_DBG = mcts-debug-dents
@@ -138,6 +179,40 @@ TARGET_MCTS_DENTS_DBG_STREE = mcts-debug-dents-stree
 
 # Default, build common objects
 all: $(TARGET_MCTS)
+
+DEPFILES = \
+	$(COMMON_OBJECTS:.o=.d) \
+	$(ENV_OBJECTS:.o=.d) \
+	$(TUNE_OBJECTS:.o=.d) \
+	$(TUNE_SAILING_OBJECTS:.o=.d) \
+	$(TUNE_TAXI_OBJECTS:.o=.d) \
+	$(TUNE_STREE_OBJECTS:.o=.d) \
+	$(TUNE_BETTINGGAME_OBJECTS:.o=.d) \
+	$(RUN_OBJECTS:.o=.d) \
+	$(RUN_SAILING_OBJECTS:.o=.d) \
+	$(RUN_TAXI_OBJECTS:.o=.d) \
+	$(RUN_BETTINGGAME_OBJECTS:.o=.d) \
+	$(RUN_RISKY_SHORTCUT_GRIDWORLD_OBJECTS:.o=.d) \
+	$(RUN_AUTONOMOUS_VEHICLE_OBJECTS:.o=.d) \
+	$(RUN_THIN_ICE_FROZEN_LAKE_PLUS_OBJECTS:.o=.d) \
+	$(RUN_OVERFLOW_QUEUE_OBJECTS:.o=.d) \
+	$(RUN_GAMBLER_JACKPOT_OBJECTS:.o=.d) \
+	$(RUN_RISKY_LADDER_OBJECTS:.o=.d) \
+	$(RUN_TWO_PATH_SSP_DECEPTIVE_OBJECTS:.o=.d) \
+	$(RUN_LASER_TAG_SAFE_GRID_OBJECTS:.o=.d) \
+	$(RUN_RIVER_SWIM_STOCHASTIC_OBJECTS:.o=.d) \
+	$(RUN_TWO_LEVEL_RISKY_TREASURE_OBJECTS:.o=.d) \
+	$(RUN_STREE_OBJECTS:.o=.d) \
+	$(VarDE_DBG_OBJECTS:.o=.d) \
+	$(DENTS_DBG_OBJECTS:.o=.d) \
+	$(VarDE_DBG_SAILING_OBJECTS:.o=.d) \
+	$(VarDE_DBG_TAXI_OBJECTS:.o=.d) \
+	$(DENTS_DBG_SAILING_OBJECTS:.o=.d) \
+	$(DENTS_DBG_TAXI_OBJECTS:.o=.d) \
+	$(VarDE_DBG_STREE_OBJECTS:.o=.d) \
+	$(DENTS_DBG_STREE_OBJECTS:.o=.d)
+
+-include $(DEPFILES)
 
 
 
@@ -159,112 +234,152 @@ all: $(TARGET_MCTS)
 # Build object files rule
 $(COMMON_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build environment object files rule
 $(ENV_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build tuner object files rule
 $(TUNE_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build sailing tuner object files rule
 $(TUNE_SAILING_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build taxi tuner object files rule
 $(TUNE_TAXI_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build synthetic tree tuner object files rule
 $(TUNE_STREE_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build betting game tuner object files rule
 $(TUNE_BETTINGGAME_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build run object files rule
 $(RUN_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build sailing run object files rule
 $(RUN_SAILING_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build taxi run object files rule
 $(RUN_TAXI_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build betting game run object files rule
 $(RUN_BETTINGGAME_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build risky shortcut gridworld run object files rule
 $(RUN_RISKY_SHORTCUT_GRIDWORLD_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build autonomous vehicle run object files rule
 $(RUN_AUTONOMOUS_VEHICLE_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
+
+# Build thin ice frozen lake plus run object files rule
+$(RUN_THIN_ICE_FROZEN_LAKE_PLUS_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
+
+# Build overflow queue run object files rule
+$(RUN_OVERFLOW_QUEUE_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
+
+# Build gambler jackpot run object files rule
+$(RUN_GAMBLER_JACKPOT_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
+
+# Build risky ladder run object files rule
+$(RUN_RISKY_LADDER_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
+
+# Build two path SSP deceptive run object files rule
+$(RUN_TWO_PATH_SSP_DECEPTIVE_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
+
+# Build laser tag safe grid run object files rule
+$(RUN_LASER_TAG_SAFE_GRID_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
+
+# Build river swim stochastic run object files rule
+$(RUN_RIVER_SWIM_STOCHASTIC_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
+
+# Build two level risky treasure run object files rule
+$(RUN_TWO_LEVEL_RISKY_TREASURE_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build synthetic tree run object files rule
 $(RUN_STREE_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build VarDE debug object files rule
 $(VarDE_DBG_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build DENTS debug object files rule
 $(DENTS_DBG_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build VarDE Sailing debug object files rule
 $(VarDE_DBG_SAILING_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build VarDE Taxi debug object files rule
 $(VarDE_DBG_TAXI_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build DENTS Sailing debug object files rule
 $(DENTS_DBG_SAILING_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build DENTS Taxi debug object files rule
 $(DENTS_DBG_TAXI_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build VarDE Synthetic Tree debug object files rule
 $(VarDE_DBG_STREE_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build DENTS Synthetic Tree debug object files rule
 $(DENTS_DBG_STREE_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 
 
@@ -317,6 +432,38 @@ $(TARGET_MCTS_RUN_RISKY_SHORTCUT_GRIDWORLD): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(
 
 # Build Autonomous Vehicle experiment
 $(TARGET_MCTS_RUN_AUTONOMOUS_VEHICLE): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(RUN_AUTONOMOUS_VEHICLE_OBJECTS)
+	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Build Thin Ice Frozen Lake Plus experiment
+$(TARGET_MCTS_RUN_THIN_ICE_FROZEN_LAKE_PLUS): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(RUN_THIN_ICE_FROZEN_LAKE_PLUS_OBJECTS)
+	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Build Overflow Queue experiment
+$(TARGET_MCTS_RUN_OVERFLOW_QUEUE): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(RUN_OVERFLOW_QUEUE_OBJECTS)
+	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Build Gambler Jackpot experiment
+$(TARGET_MCTS_RUN_GAMBLER_JACKPOT): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(RUN_GAMBLER_JACKPOT_OBJECTS)
+	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Build Risky Ladder experiment
+$(TARGET_MCTS_RUN_RISKY_LADDER): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(RUN_RISKY_LADDER_OBJECTS)
+	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Build Two Path SSP Deceptive experiment
+$(TARGET_MCTS_RUN_TWO_PATH_SSP_DECEPTIVE): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(RUN_TWO_PATH_SSP_DECEPTIVE_OBJECTS)
+	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Build Laser Tag Safe Grid experiment
+$(TARGET_MCTS_RUN_LASER_TAG_SAFE_GRID): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(RUN_LASER_TAG_SAFE_GRID_OBJECTS)
+	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Build River Swim Stochastic experiment
+$(TARGET_MCTS_RUN_RIVER_SWIM_STOCHASTIC): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(RUN_RIVER_SWIM_STOCHASTIC_OBJECTS)
+	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Build Two Level Risky Treasure experiment
+$(TARGET_MCTS_RUN_TWO_LEVEL_RISKY_TREASURE): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(RUN_TWO_LEVEL_RISKY_TREASURE_OBJECTS)
 	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
 
 # Build Synthetic Tree experiment with tuned parameters
@@ -379,6 +526,14 @@ clean:
 	@[ -f $(TARGET_MCTS_RUN_BETTINGGAME) ] && @rm $(TARGET_MCTS_RUN_BETTINGGAME) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_RUN_RISKY_SHORTCUT_GRIDWORLD) ] && @rm $(TARGET_MCTS_RUN_RISKY_SHORTCUT_GRIDWORLD) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_RUN_AUTONOMOUS_VEHICLE) ] && @rm $(TARGET_MCTS_RUN_AUTONOMOUS_VEHICLE) > /dev/null 2> /dev/null || :
+	@[ -f $(TARGET_MCTS_RUN_THIN_ICE_FROZEN_LAKE_PLUS) ] && @rm $(TARGET_MCTS_RUN_THIN_ICE_FROZEN_LAKE_PLUS) > /dev/null 2> /dev/null || :
+	@[ -f $(TARGET_MCTS_RUN_OVERFLOW_QUEUE) ] && @rm $(TARGET_MCTS_RUN_OVERFLOW_QUEUE) > /dev/null 2> /dev/null || :
+	@[ -f $(TARGET_MCTS_RUN_GAMBLER_JACKPOT) ] && @rm $(TARGET_MCTS_RUN_GAMBLER_JACKPOT) > /dev/null 2> /dev/null || :
+	@[ -f $(TARGET_MCTS_RUN_RISKY_LADDER) ] && @rm $(TARGET_MCTS_RUN_RISKY_LADDER) > /dev/null 2> /dev/null || :
+	@[ -f $(TARGET_MCTS_RUN_TWO_PATH_SSP_DECEPTIVE) ] && @rm $(TARGET_MCTS_RUN_TWO_PATH_SSP_DECEPTIVE) > /dev/null 2> /dev/null || :
+	@[ -f $(TARGET_MCTS_RUN_LASER_TAG_SAFE_GRID) ] && @rm $(TARGET_MCTS_RUN_LASER_TAG_SAFE_GRID) > /dev/null 2> /dev/null || :
+	@[ -f $(TARGET_MCTS_RUN_RIVER_SWIM_STOCHASTIC) ] && @rm $(TARGET_MCTS_RUN_RIVER_SWIM_STOCHASTIC) > /dev/null 2> /dev/null || :
+	@[ -f $(TARGET_MCTS_RUN_TWO_LEVEL_RISKY_TREASURE) ] && @rm $(TARGET_MCTS_RUN_TWO_LEVEL_RISKY_TREASURE) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_RUN_STREE) ] && @rm $(TARGET_MCTS_RUN_STREE) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_VarDE_DBG) ] && @rm $(TARGET_MCTS_VarDE_DBG) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_DENTS_DBG) ] && @rm $(TARGET_MCTS_DENTS_DBG) > /dev/null 2> /dev/null || :
@@ -391,4 +546,4 @@ clean:
 #####
 # Phony targets, so make knows when a target isn't producing a corresponding output file of same name
 #####
-.PHONY: clean $(TARGET_MCTS) $(TARGET_MCTS_TUNE) $(TARGET_MCTS_TUNE_SAILING) $(TARGET_MCTS_TUNE_TAXI) $(TARGET_MCTS_TUNE_STREE) $(TARGET_MCTS_TUNE_BETTINGGAME) $(TARGET_MCTS_RUN) $(TARGET_MCTS_RUN_SAILING) $(TARGET_MCTS_RUN_TAXI) $(TARGET_MCTS_RUN_BETTINGGAME) $(TARGET_MCTS_RUN_RISKY_SHORTCUT_GRIDWORLD) $(TARGET_MCTS_RUN_AUTONOMOUS_VEHICLE) $(TARGET_MCTS_RUN_STREE) $(TARGET_MCTS_VarDE_DBG) $(TARGET_MCTS_DENTS_DBG) $(TARGET_MCTS_VarDE_DBG_SAILING) $(TARGET_MCTS_DENTS_DBG_SAILING) $(TARGET_MCTS_VarDE_DBG_TAXI) $(TARGET_MCTS_DENTS_DBG_TAXI) $(TARGET_MCTS_VarDE_DBG_STREE) $(TARGET_MCTS_DENTS_DBG_STREE)
+.PHONY: clean $(TARGET_MCTS) $(TARGET_MCTS_TUNE) $(TARGET_MCTS_TUNE_SAILING) $(TARGET_MCTS_TUNE_TAXI) $(TARGET_MCTS_TUNE_STREE) $(TARGET_MCTS_TUNE_BETTINGGAME) $(TARGET_MCTS_RUN) $(TARGET_MCTS_RUN_SAILING) $(TARGET_MCTS_RUN_TAXI) $(TARGET_MCTS_RUN_BETTINGGAME) $(TARGET_MCTS_RUN_RISKY_SHORTCUT_GRIDWORLD) $(TARGET_MCTS_RUN_AUTONOMOUS_VEHICLE) $(TARGET_MCTS_RUN_THIN_ICE_FROZEN_LAKE_PLUS) $(TARGET_MCTS_RUN_OVERFLOW_QUEUE) $(TARGET_MCTS_RUN_GAMBLER_JACKPOT) $(TARGET_MCTS_RUN_RISKY_LADDER) $(TARGET_MCTS_RUN_TWO_PATH_SSP_DECEPTIVE) $(TARGET_MCTS_RUN_LASER_TAG_SAFE_GRID) $(TARGET_MCTS_RUN_RIVER_SWIM_STOCHASTIC) $(TARGET_MCTS_RUN_TWO_LEVEL_RISKY_TREASURE) $(TARGET_MCTS_RUN_STREE) $(TARGET_MCTS_VarDE_DBG) $(TARGET_MCTS_DENTS_DBG) $(TARGET_MCTS_VarDE_DBG_SAILING) $(TARGET_MCTS_DENTS_DBG_SAILING) $(TARGET_MCTS_VarDE_DBG_TAXI) $(TARGET_MCTS_DENTS_DBG_TAXI) $(TARGET_MCTS_VarDE_DBG_STREE) $(TARGET_MCTS_DENTS_DBG_STREE)

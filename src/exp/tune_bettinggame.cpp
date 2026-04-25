@@ -11,6 +11,7 @@
 #include "mcts.h"
 #include "mcts_env_context.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <fstream>
@@ -31,7 +32,6 @@ using namespace std;
 
 namespace {
     constexpr double kCvarTolerance = 1e-12;
-    constexpr double kCatastrophicBankrollThreshold = 1e-12;
     constexpr double kDefaultOptimalActionRegretThreshold = 0.0;
 
     struct Candidate {
@@ -48,6 +48,7 @@ namespace {
     struct EvalStats {
         double mean;
         double stddev;
+        double cvar;
         int catastrophic_count;
     };
 
@@ -88,6 +89,7 @@ namespace {
         int count = 0;
         double sum_mc_mean = 0.0;
         double sum_mc_stddev = 0.0;
+        double sum_mc_cvar = 0.0;
         double sum_cvar_regret = 0.0;
         double sum_optimal_action_hit = 0.0;
         double sum_catastrophic_count = 0.0;
@@ -172,6 +174,32 @@ namespace {
             const double mass_to_take = min(probability, remaining_mass);
             tail_sum += mass_to_take * value;
             cumulative_mass += probability;
+
+            if (cumulative_mass >= tail_mass) {
+                break;
+            }
+        }
+
+        return tail_sum / tail_mass;
+    }
+
+    double compute_empirical_lower_tail_cvar(vector<double> samples, double tau) {
+        if (samples.empty()) {
+            return 0.0;
+        }
+
+        sort(samples.begin(), samples.end());
+
+        const double tau_clamped = max(kCvarTolerance, min(tau, 1.0));
+        const double tail_mass = tau_clamped * static_cast<double>(samples.size());
+        double cumulative_mass = 0.0;
+        double tail_sum = 0.0;
+
+        for (double sample : samples) {
+            const double remaining_mass = max(0.0, tail_mass - cumulative_mass);
+            const double mass_to_take = min(1.0, remaining_mass);
+            tail_sum += mass_to_take * sample;
+            cumulative_mass += 1.0;
 
             if (cumulative_mass >= tail_mass) {
                 break;
@@ -270,7 +298,8 @@ namespace {
         int horizon,
         int rollouts,
         int threads,
-        int seed)
+        int seed,
+        double cvar_tau)
     {
         (void)threads;
 
@@ -286,6 +315,7 @@ namespace {
             int num_actions_taken = 0;
             double sample_return = 0.0;
             shared_ptr<const mcts::State> state = env->get_initial_state_itfc();
+            bool rollout_was_catastrophic = env->is_catastrophic_state_itfc(state);
             auto context_ptr = env->sample_context_itfc(state);
             mcts::MctsEnvContext& context = *context_ptr;
 
@@ -297,16 +327,16 @@ namespace {
                     env->sample_observation_distribution_itfc(action, next_state, eval_rng);
 
                 sample_return += env->get_reward_itfc(state, action, observation);
+                if (env->is_catastrophic_state_itfc(next_state)) {
+                    rollout_was_catastrophic = true;
+                }
                 policy.update_step(action, observation);
                 state = next_state;
                 num_actions_taken++;
             }
 
             sampled_returns.push_back(sample_return);
-
-            shared_ptr<const mcts::exp::BettingGameState> final_state =
-                static_pointer_cast<const mcts::exp::BettingGameState>(state);
-            if (final_state->bankroll <= kCatastrophicBankrollThreshold) {
+            if (rollout_was_catastrophic) {
                 catastrophic_count++;
             }
         }
@@ -331,7 +361,8 @@ namespace {
             stddev = sqrt(variance);
         }
 
-        return {mean, stddev, catastrophic_count};
+        const double cvar = compute_empirical_lower_tail_cvar(sampled_returns, cvar_tau);
+        return {mean, stddev, cvar, catastrophic_count};
     }
 
     static BettingGameMetrics evaluate_bettinggame_metrics(
@@ -506,7 +537,7 @@ int main(int argc, char** argv) {
 
     ofstream out("tune_bettinggame.csv", ios::out | ios::trunc);
     out << setprecision(17);
-    out << "env,algorithm,config,eval_tau,run,mc_mean,mc_stddev,cvar_regret,optimal_action_hit,catastrophic_count\n";
+    out << "env,algorithm,config,eval_tau,run,mc_mean,mc_stddev,mc_cvar,cvar_regret,optimal_action_hit,catastrophic_count\n";
 
     map<string, map<double, unordered_map<string, Aggregate>>> agg;
 
@@ -546,7 +577,7 @@ int main(int argc, char** argv) {
                 pool->run_trials(total_trials, numeric_limits<double>::max(), true);
             }
 
-            auto stats = evaluate_tree(env, root, horizon, eval_rollouts, threads, seed + 777);
+            auto stats = evaluate_tree(env, root, horizon, eval_rollouts, threads, seed + 777, cand.eval_tau);
             const auto& root_solution = oracle_by_tau.at(cand.eval_tau).solve_state(env->get_initial_state());
             auto metrics = evaluate_bettinggame_metrics(
                 env,
@@ -555,6 +586,7 @@ int main(int argc, char** argv) {
                 optimal_action_regret_threshold);
             out << "bettinggame," << cand.algo << "," << csv_escape(cand.config) << "," << cand.eval_tau << "," << run
                 << "," << stats.mean << "," << stats.stddev
+                << "," << stats.cvar
                 << "," << metrics.cvar_regret << "," << metrics.optimal_action_hit
                 << "," << stats.catastrophic_count << "\n";
 
@@ -562,6 +594,7 @@ int main(int argc, char** argv) {
             a.count++;
             a.sum_mc_mean += stats.mean;
             a.sum_mc_stddev += stats.stddev;
+            a.sum_mc_cvar += stats.cvar;
             a.sum_cvar_regret += metrics.cvar_regret;
             a.sum_optimal_action_hit += metrics.optimal_action_hit;
             a.sum_catastrophic_count += static_cast<double>(stats.catastrophic_count);

@@ -99,6 +99,10 @@ namespace mcts::exp {
         return state->time >= max_sequence_length || is_absorbing_bankroll(state->bankroll);
     }
 
+    bool BettingGameEnv::is_catastrophic_state(shared_ptr<const BettingGameState> state) const {
+        return state->bankroll <= kBankrollEps;
+    }
+
     shared_ptr<mcts::IntActionVector> BettingGameEnv::get_valid_actions(
         shared_ptr<const BettingGameState> state) const
     {
@@ -178,6 +182,11 @@ namespace mcts::exp {
     bool BettingGameEnv::is_sink_state_itfc(shared_ptr<const mcts::State> state) const {
         auto s = static_pointer_cast<const BettingGameState>(state);
         return is_sink_state(s);
+    }
+
+    bool BettingGameEnv::is_catastrophic_state_itfc(shared_ptr<const mcts::State> state) const {
+        auto s = static_pointer_cast<const BettingGameState>(state);
+        return is_catastrophic_state(s);
     }
 
     shared_ptr<mcts::ActionVector> BettingGameEnv::get_valid_actions_itfc(shared_ptr<const mcts::State> state) const {

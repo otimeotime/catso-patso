@@ -14,6 +14,7 @@
 #include "mcts_env_context.h"
 #include "exp/manager_config_printer.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <fstream>
@@ -46,6 +47,7 @@ namespace {
     struct EvalStats {
         double mean;
         double stddev;
+        double cvar;
         int catastrophic_count;
     };
 
@@ -71,6 +73,7 @@ namespace {
         int regret_count = 0;
         double sum_mc_mean = 0.0;
         double sum_mc_stddev = 0.0;
+        double sum_mc_cvar = 0.0;
         double sum_cvar_regret = 0.0;
         double sum_optimal_action_hit = 0.0;
         double sum_catastrophic_count = 0.0;
@@ -107,6 +110,32 @@ namespace {
             const double mass_to_take = min(probability, remaining_mass);
             tail_sum += mass_to_take * value;
             cumulative_mass += probability;
+
+            if (cumulative_mass >= tail_mass) {
+                break;
+            }
+        }
+
+        return tail_sum / tail_mass;
+    }
+
+    double compute_empirical_lower_tail_cvar(vector<double> samples, double tau) {
+        if (samples.empty()) {
+            return 0.0;
+        }
+
+        sort(samples.begin(), samples.end());
+
+        const double tau_clamped = max(kCvarTolerance, min(tau, 1.0));
+        const double tail_mass = tau_clamped * static_cast<double>(samples.size());
+        double cumulative_mass = 0.0;
+        double tail_sum = 0.0;
+
+        for (double sample : samples) {
+            const double remaining_mass = max(0.0, tail_mass - cumulative_mass);
+            const double mass_to_take = min(1.0, remaining_mass);
+            tail_sum += mass_to_take * sample;
+            cumulative_mass += 1.0;
 
             if (cumulative_mass >= tail_mass) {
                 break;
@@ -202,7 +231,8 @@ namespace {
         int horizon,
         int rollouts,
         int threads,
-        int seed)
+        int seed,
+        double cvar_tau)
     {
         (void)threads;
 
@@ -218,6 +248,7 @@ namespace {
             int num_actions_taken = 0;
             double sample_return = 0.0;
             shared_ptr<const mcts::State> state = env->get_initial_state_itfc();
+            bool rollout_was_catastrophic = env->is_catastrophic_state_itfc(state);
             auto context_ptr = env->sample_context_itfc(state);
             mcts::MctsEnvContext& context = *context_ptr;
 
@@ -229,14 +260,16 @@ namespace {
                     env->sample_observation_distribution_itfc(action, next_state, eval_rng);
 
                 sample_return += env->get_reward_itfc(state, action, observation);
+                if (env->is_catastrophic_state_itfc(next_state)) {
+                    rollout_was_catastrophic = true;
+                }
                 policy.update_step(action, observation);
                 state = next_state;
                 num_actions_taken++;
             }
 
             sampled_returns.push_back(sample_return);
-            auto final_state = static_pointer_cast<const mcts::Int3TupleState>(state);
-            if (env->is_catastrophic_state(final_state)) {
+            if (rollout_was_catastrophic) {
                 catastrophic_count++;
             }
         }
@@ -261,7 +294,8 @@ namespace {
             stddev = sqrt(variance);
         }
 
-        return {mean, stddev, catastrophic_count};
+        const double cvar = compute_empirical_lower_tail_cvar(sampled_returns, cvar_tau);
+        return {mean, stddev, cvar, catastrophic_count};
     }
 
     static ExperimentMetrics evaluate_root_metrics(
@@ -351,7 +385,7 @@ int main(int argc, char** argv) {
     const array<double, 2> edge_probs = mcts::exp::AutonomousVehicleEnv::default_edge_probs();
     const int max_steps = 8;
     const double reward_normalisation = mcts::exp::AutonomousVehicleEnv::default_reward_normalisation;
-    const double cvar_tau = 0.2;
+    const double cvar_tau = 0.05;
     const int horizon = max_steps;
     const int eval_rollouts = 200;
     const int runs = 5;
@@ -359,7 +393,7 @@ int main(int argc, char** argv) {
     const int base_seed = 4242;
 
     vector<int> trial_counts;
-    for (int i = 1; i <= 100; ++i) {
+    for (int i = 1; i <= 60; ++i) {
         trial_counts.push_back(i * 1000);
     }
 
@@ -378,7 +412,7 @@ int main(int argc, char** argv) {
 
     ofstream out("results_autonomous_vehicle.csv", ios::out | ios::trunc);
     out << setprecision(17);
-    out << "env,algorithm,run,trial,mc_mean,mc_stddev,cvar_regret,optimal_action_hit,catastrophic_count\n";
+    out << "env,algorithm,run,trial,mc_mean,mc_stddev,mc_cvar,cvar_regret,optimal_action_hit,catastrophic_count\n";
 
     cout << "[exp] AutonomousVehicle"
          << ", width=" << env->get_width()
@@ -423,10 +457,11 @@ int main(int argc, char** argv) {
                     trials_so_far = target_trials;
                 }
 
-                auto stats = evaluate_tree(env, root, horizon, eval_rollouts, threads, seed + 777);
+                auto stats = evaluate_tree(env, root, horizon, eval_rollouts, threads, seed + 777, cvar_tau);
                 auto metrics = evaluate_root_metrics(env, root, root_solution);
                 out << "autonomous_vehicle," << cand.algo << "," << run
                     << "," << target_trials << "," << stats.mean << "," << stats.stddev
+                    << "," << stats.cvar
                     << "," << metrics.cvar_regret << "," << metrics.optimal_action_hit
                     << "," << stats.catastrophic_count << "\n";
 
@@ -434,6 +469,7 @@ int main(int argc, char** argv) {
                 summary.count++;
                 summary.sum_mc_mean += stats.mean;
                 summary.sum_mc_stddev += stats.stddev;
+                summary.sum_mc_cvar += stats.cvar;
                 summary.sum_optimal_action_hit += metrics.optimal_action_hit;
                 summary.sum_catastrophic_count += static_cast<double>(stats.catastrophic_count);
                 if (!std::isnan(metrics.cvar_regret)) {
@@ -448,7 +484,7 @@ int main(int argc, char** argv) {
 
     ofstream summary_out("results_autonomous_vehicle_summary.csv", ios::out | ios::trunc);
     summary_out << setprecision(17);
-    summary_out << "env,algorithm,trial,mc_mean,mc_stddev,cvar_regret,optimal_action_prob,catastrophic_count\n";
+    summary_out << "env,algorithm,trial,mc_mean,mc_stddev,mc_cvar,cvar_regret,optimal_action_prob,catastrophic_count\n";
     for (const auto& [algo_trial, summary] : summary_by_algo_and_trial) {
         const string& algo = algo_trial.first;
         const int trial = algo_trial.second;
@@ -459,6 +495,7 @@ int main(int argc, char** argv) {
         summary_out << "autonomous_vehicle," << algo << "," << trial
             << "," << (summary.sum_mc_mean / static_cast<double>(summary.count))
             << "," << (summary.sum_mc_stddev / static_cast<double>(summary.count))
+            << "," << (summary.sum_mc_cvar / static_cast<double>(summary.count))
             << "," << mean_cvar_regret
             << "," << (summary.sum_optimal_action_hit / static_cast<double>(summary.count))
             << "," << (summary.sum_catastrophic_count / static_cast<double>(summary.count))

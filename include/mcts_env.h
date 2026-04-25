@@ -77,6 +77,14 @@ namespace mcts {
             virtual bool is_sink_state_itfc(std::shared_ptr<const State> state) const = 0;
 
             /**
+             * Returns whether a state should count as catastrophic for evaluation reporting.
+             *
+             * The default implementation returns false so environments without an explicit catastrophe notion do not
+             * contribute to catastrophic-count metrics.
+             */
+            virtual bool is_catastrophic_state_itfc(std::shared_ptr<const State> state) const;
+
+            /**
              * Returns a list of actions that are valid in a given state.
              * 
              * Args:

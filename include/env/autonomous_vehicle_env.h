@@ -81,6 +81,7 @@ namespace mcts::exp {
             // Interface API
             virtual std::shared_ptr<const mcts::State> get_initial_state_itfc() const override;
             virtual bool is_sink_state_itfc(std::shared_ptr<const mcts::State> state) const override;
+            virtual bool is_catastrophic_state_itfc(std::shared_ptr<const mcts::State> state) const override;
             virtual std::shared_ptr<mcts::ActionVector> get_valid_actions_itfc(
                 std::shared_ptr<const mcts::State> state) const override;
             virtual std::shared_ptr<mcts::StateDistr> get_transition_distribution_itfc(

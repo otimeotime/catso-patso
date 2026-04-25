@@ -175,6 +175,50 @@ namespace mcts {
     }
 
     /**
+     * Implementation of virtual hash function for Int4TupleState
+     */
+    size_t Int4TupleState::hash() const {
+        size_t cur_hash = 0;
+        cur_hash = helper::hash_combine(cur_hash, get<0>(state));
+        cur_hash = helper::hash_combine(cur_hash, get<1>(state));
+        cur_hash = helper::hash_combine(cur_hash, get<2>(state));
+        return helper::hash_combine(cur_hash, get<3>(state));
+    }
+
+    /**
+     * Implementation of virtual equals_itfc function for Int4TupleState
+     */
+    bool Int4TupleState::equals_itfc(const Observation& other) const {
+        try {
+            const Int4TupleState& oth = dynamic_cast<const Int4TupleState&>(other);
+            return equals(oth);
+        }
+        catch (const bad_cast&) {
+            return false;
+        }
+    }
+
+    /**
+     * Implementation of virtual equals function for Int4TupleState
+     */
+    bool Int4TupleState::equals(const Int4TupleState& other) const {
+        return (get<0>(state) == get<0>(other.state)
+            && get<1>(state) == get<1>(other.state)
+            && get<2>(state) == get<2>(other.state)
+            && get<3>(state) == get<3>(other.state));
+    }
+
+    /**
+     * Implementation of virtual pretty print function for Int4TupleState
+     */
+    string Int4TupleState::get_pretty_print_string() const {
+        stringstream ss;
+        ss << "(" << get<0>(state) << "," << get<1>(state) << "," << get<2>(state) << "," << get<3>(state)
+           << ")";
+        return ss.str();
+    }
+
+    /**
      * Implementation of virtual hash function for IntAction
      */
     size_t IntAction::hash() const {

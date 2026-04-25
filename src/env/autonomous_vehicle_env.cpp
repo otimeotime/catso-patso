@@ -212,8 +212,15 @@ namespace mcts::exp {
     }
 
     bool AutonomousVehicleEnv::is_catastrophic_state(shared_ptr<const mcts::Int3TupleState> state) const {
-        (void)state;
-        return false;
+        int x = 0;
+        int y = 0;
+        int time = 0;
+        int last_outcome = 0;
+        decode_state(state, x, y, time, last_outcome);
+        (void)x;
+        (void)y;
+        (void)time;
+        return last_outcome == (num_reward_outcomes - 1);
     }
 
     bool AutonomousVehicleEnv::is_sink_state(shared_ptr<const mcts::Int3TupleState> state) const {
@@ -344,6 +351,11 @@ namespace mcts::exp {
     bool AutonomousVehicleEnv::is_sink_state_itfc(shared_ptr<const mcts::State> state) const {
         auto typed_state = static_pointer_cast<const mcts::Int3TupleState>(state);
         return is_sink_state(typed_state);
+    }
+
+    bool AutonomousVehicleEnv::is_catastrophic_state_itfc(shared_ptr<const mcts::State> state) const {
+        auto typed_state = static_pointer_cast<const mcts::Int3TupleState>(state);
+        return is_catastrophic_state(typed_state);
     }
 
     shared_ptr<mcts::ActionVector> AutonomousVehicleEnv::get_valid_actions_itfc(

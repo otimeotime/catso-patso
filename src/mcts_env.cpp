@@ -19,6 +19,11 @@ namespace mcts {
         return _is_fully_observable;
     }
 
+    bool MctsEnv::is_catastrophic_state_itfc(shared_ptr<const State> state) const {
+        (void)state;
+        return false;
+    }
+
     /**
      * Default implmentation of 'get_observation_distribution_itfc'.
      * 
