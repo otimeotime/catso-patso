@@ -48,6 +48,7 @@ namespace {
         double mean;
         double stddev;
         double cvar;
+        double cvar_stddev;
         int catastrophic_count;
     };
 
@@ -74,6 +75,7 @@ namespace {
         double sum_mc_mean = 0.0;
         double sum_mc_stddev = 0.0;
         double sum_mc_cvar = 0.0;
+        double sum_mc_cvar_stddev = 0.0;
         double sum_cvar_regret = 0.0;
         double sum_optimal_action_hit = 0.0;
         double sum_catastrophic_count = 0.0;
@@ -119,9 +121,14 @@ namespace {
         return tail_sum / tail_mass;
     }
 
-    double compute_empirical_lower_tail_cvar(vector<double> samples, double tau) {
+    struct TailStats {
+        double mean;
+        double stddev;
+    };
+
+    TailStats compute_empirical_lower_tail_stats(vector<double> samples, double tau) {
         if (samples.empty()) {
-            return 0.0;
+            return {0.0, 0.0};
         }
 
         sort(samples.begin(), samples.end());
@@ -130,19 +137,39 @@ namespace {
         const double tail_mass = tau_clamped * static_cast<double>(samples.size());
         double cumulative_mass = 0.0;
         double tail_sum = 0.0;
+        double sum_weight_squares = 0.0;
+        vector<pair<double, double>> tail_samples;
+        tail_samples.reserve(samples.size());
 
         for (double sample : samples) {
             const double remaining_mass = max(0.0, tail_mass - cumulative_mass);
             const double mass_to_take = min(1.0, remaining_mass);
+            if (mass_to_take <= 0.0) {
+                break;
+            }
+
             tail_sum += mass_to_take * sample;
-            cumulative_mass += 1.0;
+            sum_weight_squares += mass_to_take * mass_to_take;
+            tail_samples.emplace_back(sample, mass_to_take);
+            cumulative_mass += mass_to_take;
 
             if (cumulative_mass >= tail_mass) {
                 break;
             }
         }
 
-        return tail_sum / tail_mass;
+        const double mean = tail_sum / tail_mass;
+        double stddev = 0.0;
+        const double variance_denom = tail_mass - (sum_weight_squares / tail_mass);
+        if (variance_denom > 0.0) {
+            double variance_numer = 0.0;
+            for (const auto& [sample, weight] : tail_samples) {
+                variance_numer += weight * pow(sample - mean, 2.0);
+            }
+            stddev = sqrt(variance_numer / variance_denom);
+        }
+
+        return {mean, stddev};
     }
 
     class AutonomousVehicleCvarOracle {
@@ -275,7 +302,7 @@ namespace {
         }
 
         if (sampled_returns.empty()) {
-            return {0.0, 0.0, 0};
+            return {0.0, 0.0, 0.0, 0.0, 0};
         }
 
         double mean = 0.0;
@@ -294,8 +321,8 @@ namespace {
             stddev = sqrt(variance);
         }
 
-        const double cvar = compute_empirical_lower_tail_cvar(sampled_returns, cvar_tau);
-        return {mean, stddev, cvar, catastrophic_count};
+        const TailStats cvar_stats = compute_empirical_lower_tail_stats(sampled_returns, cvar_tau);
+        return {mean, stddev, cvar_stats.mean, cvar_stats.stddev, catastrophic_count};
     }
 
     static ExperimentMetrics evaluate_root_metrics(
@@ -388,12 +415,12 @@ int main(int argc, char** argv) {
     const double cvar_tau = 0.05;
     const int horizon = max_steps;
     const int eval_rollouts = 200;
-    const int runs = 5;
+    const int runs = 3;
     const int threads = 8;
     const int base_seed = 4242;
 
     vector<int> trial_counts;
-    for (int i = 1; i <= 60; ++i) {
+    for (int i = 1; i <= 30; ++i) {
         trial_counts.push_back(i * 1000);
     }
 
@@ -412,7 +439,7 @@ int main(int argc, char** argv) {
 
     ofstream out("results_autonomous_vehicle.csv", ios::out | ios::trunc);
     out << setprecision(17);
-    out << "env,algorithm,run,trial,mc_mean,mc_stddev,mc_cvar,cvar_regret,optimal_action_hit,catastrophic_count\n";
+    out << "env,algorithm,run,trial,mc_mean,mc_stddev,mc_cvar,mc_cvar_stddev,cvar_regret,optimal_action_hit,catastrophic_count\n";
 
     cout << "[exp] AutonomousVehicle"
          << ", width=" << env->get_width()
@@ -461,7 +488,7 @@ int main(int argc, char** argv) {
                 auto metrics = evaluate_root_metrics(env, root, root_solution);
                 out << "autonomous_vehicle," << cand.algo << "," << run
                     << "," << target_trials << "," << stats.mean << "," << stats.stddev
-                    << "," << stats.cvar
+                    << "," << stats.cvar << "," << stats.cvar_stddev
                     << "," << metrics.cvar_regret << "," << metrics.optimal_action_hit
                     << "," << stats.catastrophic_count << "\n";
 
@@ -470,6 +497,7 @@ int main(int argc, char** argv) {
                 summary.sum_mc_mean += stats.mean;
                 summary.sum_mc_stddev += stats.stddev;
                 summary.sum_mc_cvar += stats.cvar;
+                summary.sum_mc_cvar_stddev += stats.cvar_stddev;
                 summary.sum_optimal_action_hit += metrics.optimal_action_hit;
                 summary.sum_catastrophic_count += static_cast<double>(stats.catastrophic_count);
                 if (!std::isnan(metrics.cvar_regret)) {
@@ -484,7 +512,7 @@ int main(int argc, char** argv) {
 
     ofstream summary_out("results_autonomous_vehicle_summary.csv", ios::out | ios::trunc);
     summary_out << setprecision(17);
-    summary_out << "env,algorithm,trial,mc_mean,mc_stddev,mc_cvar,cvar_regret,optimal_action_prob,catastrophic_count\n";
+    summary_out << "env,algorithm,trial,mc_mean,mc_stddev,mc_cvar,mc_cvar_stddev,cvar_regret,optimal_action_prob,catastrophic_count\n";
     for (const auto& [algo_trial, summary] : summary_by_algo_and_trial) {
         const string& algo = algo_trial.first;
         const int trial = algo_trial.second;
@@ -496,6 +524,7 @@ int main(int argc, char** argv) {
             << "," << (summary.sum_mc_mean / static_cast<double>(summary.count))
             << "," << (summary.sum_mc_stddev / static_cast<double>(summary.count))
             << "," << (summary.sum_mc_cvar / static_cast<double>(summary.count))
+            << "," << (summary.sum_mc_cvar_stddev / static_cast<double>(summary.count))
             << "," << mean_cvar_regret
             << "," << (summary.sum_optimal_action_hit / static_cast<double>(summary.count))
             << "," << (summary.sum_catastrophic_count / static_cast<double>(summary.count))

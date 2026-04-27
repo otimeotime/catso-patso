@@ -514,7 +514,7 @@ int main(int argc, char** argv) {
     const double reward_normalisation = mcts::exp::BettingGameEnv::default_reward_normalisation;
     const double cvar_tau = 0.2;
     const int horizon = max_sequence_length;
-    const int total_trials = 30000;
+    const int total_trials = 10000;
     const int eval_rollouts = 200;
     const int runs = 2;
     const int threads = 16;
