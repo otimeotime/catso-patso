@@ -81,6 +81,50 @@ namespace mcts {
         return best_index;
     }
 
+    void CatsoCNode::add_cramer_mass(
+        vector<double>& counts,
+        const vector<double>& atom_grid,
+        double value,
+        double weight) const
+    {
+        if (atom_grid.empty() || counts.size() != atom_grid.size() || weight <= 0.0) {
+            return;
+        }
+
+        const int grid_size = static_cast<int>(atom_grid.size());
+        if (grid_size == 1) {
+            counts[0] += weight;
+            return;
+        }
+
+        const double lo = atom_grid.front();
+        const double hi = atom_grid.back();
+        if (value <= lo) {
+            counts[0] += weight;
+            return;
+        }
+        if (value >= hi) {
+            counts[static_cast<size_t>(grid_size - 1)] += weight;
+            return;
+        }
+
+        const double dz = (hi - lo) / static_cast<double>(grid_size - 1);
+        if (dz <= 0.0) {
+            counts[0] += weight;
+            return;
+        }
+
+        int lower = static_cast<int>((value - lo) / dz);
+        if (lower < 0) lower = 0;
+        if (lower > grid_size - 2) lower = grid_size - 2;
+        const int upper = lower + 1;
+
+        const double w_upper = (value - atom_grid[static_cast<size_t>(lower)]) / dz;
+        const double w_lower = 1.0 - w_upper;
+        counts[static_cast<size_t>(lower)] += weight * w_lower;
+        counts[static_cast<size_t>(upper)] += weight * w_upper;
+    }
+
     vector<double> CatsoCNode::sample_dirichlet(const vector<double>& alpha) const {
         if (alpha.empty()) {
             return {};
@@ -173,8 +217,7 @@ namespace mcts {
         }
 
         if (q_sample >= atoms.front() - match_tolerance && q_sample <= atoms.back() + match_tolerance) {
-            const int index = nearest_index(atoms, q_sample);
-            dirichlet_counts[static_cast<size_t>(index)] += 1.0;
+            add_cramer_mass(dirichlet_counts, atoms, q_sample, 1.0);
             return;
         }
 
@@ -191,14 +234,20 @@ namespace mcts {
             }
         }
 
-        vector<double> new_counts(static_cast<size_t>(n_atoms), 1.0);
+        // Re-bin existing posterior counts (which already include the +1 prior added at
+        // construction) onto the new grid via Cramér projection. Do NOT re-inject the
+        // prior here -- doing so would inflate the pseudo-count by N every time the
+        // grid expands.
+        vector<double> new_counts(static_cast<size_t>(n_atoms), 0.0);
         for (int i = 0; i < n_atoms; ++i) {
-            const int mapped_index = nearest_index(new_atoms, atoms[static_cast<size_t>(i)]);
-            new_counts[static_cast<size_t>(mapped_index)] += dirichlet_counts[static_cast<size_t>(i)];
+            add_cramer_mass(
+                new_counts,
+                new_atoms,
+                atoms[static_cast<size_t>(i)],
+                dirichlet_counts[static_cast<size_t>(i)]);
         }
 
-        const int sample_index = nearest_index(new_atoms, q_sample);
-        new_counts[static_cast<size_t>(sample_index)] += 1.0;
+        add_cramer_mass(new_counts, new_atoms, q_sample, 1.0);
 
         q_min = new_min;
         q_max = new_max;

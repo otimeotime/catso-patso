@@ -37,6 +37,11 @@ namespace mcts {
 
             void reset_atom_grid();
             int nearest_index(const std::vector<double>& support, double value) const;
+            void add_cramer_mass(
+                std::vector<double>& counts,
+                const std::vector<double>& atom_grid,
+                double value,
+                double weight) const;
             std::vector<double> sample_dirichlet(const std::vector<double>& alpha) const;
             double compute_lower_tail_cvar(
                 const std::vector<std::pair<double,double>>& value_weight_pairs,

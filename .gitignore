@@ -53,3 +53,7 @@ mcts-debug-dents-taxi
 mcts-debug-varde
 mcts-debug-varde-sailing
 mcts-debug-varde-taxi
+mcts-run-autonomous-vehicle
+mcts-run-bettinggame
+mcts-run-guarded-maze
+mcts-run-risky-shortcut-gridworld

@@ -103,7 +103,7 @@ namespace mcts {
 
             weighted_values.emplace_back(
                 static_cast<double>(child->num_visits),
-                opp_coeff * child->get_cvar_value());
+                opp_coeff * child->get_mean_value());
         }
         unlock_all_children();
 
@@ -125,7 +125,7 @@ namespace mcts {
             }
 
             shared_ptr<CatsoCNode> child = get_child_node(action);
-            double score = opp_coeff * child->sample_cvar_value();
+            double score = opp_coeff * child->sample_thompson_value();
             score += compute_optimism_bonus(num_visits, child->num_visits);
             action_values[action] = score;
         }
