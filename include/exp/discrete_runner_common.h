@@ -334,7 +334,7 @@ namespace mcts::exp::runner {
         double cvar_tau,
         int catso_n_atoms = 100,
         double optimism = 4.0,
-        double power_mean_exponent = 2.0,
+        double power_mean_exponent = 1.0,
         int patso_particles = 100)
     {
         std::vector<Candidate> cands;
@@ -414,7 +414,7 @@ namespace mcts::exp::runner {
         CatastropheFn catastrophe_fn,
         int catso_n_atoms = 100,
         double optimism = 4.0,
-        double power_mean_exponent = 2.0,
+        double power_mean_exponent = 1.0,
         int patso_particles = 100)
     {
         const std::shared_ptr<const EnvT> const_env = env;

@@ -412,54 +412,54 @@ namespace {
             }
         }
 
+        // Power-mean exponent is fixed to 1.0 (plain visit-weighted arithmetic mean) and
+        // no longer swept here.
+        constexpr double p_mean = 1.0;
+
         for (int n_atoms : {25, 51, 100}) {
             for (double optimism : {2.0, 4.0, 8.0}) {
-                for (double p_mean : {1.0, 2.0, 4.0}) {
-                    for (double tau : tau_values) {
-                        string cfg = "atoms=" + to_string(n_atoms)
-                            + ",optimism=" + to_string(optimism)
-                            + ",p=" + to_string(p_mean)
-                            + ",tau=" + to_string(tau);
-                        cands.push_back({"CATSO", cfg, tau, [n_atoms, optimism, p_mean, tau](auto env, auto init_state, int max_depth, int seed) {
-                            mcts::CatsoManagerArgs args(env);
-                            args.max_depth = max_depth;
-                            args.mcts_mode = false;
-                            args.n_atoms = n_atoms;
-                            args.optimism_constant = optimism;
-                            args.power_mean_exponent = p_mean;
-                            args.cvar_tau = tau;
-                            args.seed = seed;
-                            auto mgr = make_shared<mcts::CatsoManager>(args);
-                            auto root = make_shared<mcts::CatsoDNode>(mgr, init_state, 0, 0);
-                            return make_pair(static_pointer_cast<mcts::MctsManager>(mgr), static_pointer_cast<mcts::MctsDNode>(root));
-                        }});
-                    }
+                for (double tau : tau_values) {
+                    string cfg = "atoms=" + to_string(n_atoms)
+                        + ",optimism=" + to_string(optimism)
+                        + ",p=" + to_string(p_mean)
+                        + ",tau=" + to_string(tau);
+                    cands.push_back({"CATSO", cfg, tau, [n_atoms, optimism, tau](auto env, auto init_state, int max_depth, int seed) {
+                        mcts::CatsoManagerArgs args(env);
+                        args.max_depth = max_depth;
+                        args.mcts_mode = false;
+                        args.n_atoms = n_atoms;
+                        args.optimism_constant = optimism;
+                        args.power_mean_exponent = p_mean;
+                        args.cvar_tau = tau;
+                        args.seed = seed;
+                        auto mgr = make_shared<mcts::CatsoManager>(args);
+                        auto root = make_shared<mcts::CatsoDNode>(mgr, init_state, 0, 0);
+                        return make_pair(static_pointer_cast<mcts::MctsManager>(mgr), static_pointer_cast<mcts::MctsDNode>(root));
+                    }});
                 }
             }
         }
 
         for (int max_particles : {32, 64, 128}) {
             for (double optimism : {2.0, 4.0, 8.0}) {
-                for (double p_mean : {1.0, 2.0, 4.0}) {
-                    for (double tau : tau_values) {
-                        string cfg = "particles=" + to_string(max_particles)
-                            + ",optimism=" + to_string(optimism)
-                            + ",p=" + to_string(p_mean)
-                            + ",tau=" + to_string(tau);
-                        cands.push_back({"PATSO", cfg, tau, [max_particles, optimism, p_mean, tau](auto env, auto init_state, int max_depth, int seed) {
-                            mcts::PatsoManagerArgs args(env);
-                            args.max_depth = max_depth;
-                            args.mcts_mode = false;
-                            args.max_particles = max_particles;
-                            args.optimism_constant = optimism;
-                            args.power_mean_exponent = p_mean;
-                            args.cvar_tau = tau;
-                            args.seed = seed;
-                            auto mgr = make_shared<mcts::PatsoManager>(args);
-                            auto root = make_shared<mcts::PatsoDNode>(mgr, init_state, 0, 0);
-                            return make_pair(static_pointer_cast<mcts::MctsManager>(mgr), static_pointer_cast<mcts::MctsDNode>(root));
-                        }});
-                    }
+                for (double tau : tau_values) {
+                    string cfg = "particles=" + to_string(max_particles)
+                        + ",optimism=" + to_string(optimism)
+                        + ",p=" + to_string(p_mean)
+                        + ",tau=" + to_string(tau);
+                    cands.push_back({"PATSO", cfg, tau, [max_particles, optimism, tau](auto env, auto init_state, int max_depth, int seed) {
+                        mcts::PatsoManagerArgs args(env);
+                        args.max_depth = max_depth;
+                        args.mcts_mode = false;
+                        args.max_particles = max_particles;
+                        args.optimism_constant = optimism;
+                        args.power_mean_exponent = p_mean;
+                        args.cvar_tau = tau;
+                        args.seed = seed;
+                        auto mgr = make_shared<mcts::PatsoManager>(args);
+                        auto root = make_shared<mcts::PatsoDNode>(mgr, init_state, 0, 0);
+                        return make_pair(static_pointer_cast<mcts::MctsManager>(mgr), static_pointer_cast<mcts::MctsDNode>(root));
+                    }});
                 }
             }
         }

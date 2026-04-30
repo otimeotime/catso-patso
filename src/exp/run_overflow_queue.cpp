@@ -19,7 +19,7 @@ int main(int argc, char** argv) {
     constexpr int kBaseSeed = 4242;
     constexpr int kCatsoAtoms = 51;
     constexpr double kOptimism = 1.0;
-    constexpr double kPowerMeanExponent = 2.0;
+    constexpr double kPowerMeanExponent = 1.0;
     constexpr int kPatsoParticles = 64;
 
     vector<int> trial_counts;

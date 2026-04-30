@@ -6,7 +6,7 @@ namespace mcts {
     struct CatsoManagerArgs : public MctsManagerArgs {
         static const int n_atoms_default = 51;
         static constexpr double optimism_constant_default = 1.0;
-        static constexpr double power_mean_exponent_default = 4.0;
+        static constexpr double power_mean_exponent_default = 1.0;
         static constexpr double cvar_tau_default = 1.0;
 
         int n_atoms;

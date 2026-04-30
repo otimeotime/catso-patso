@@ -57,3 +57,12 @@ mcts-run-autonomous-vehicle
 mcts-run-bettinggame
 mcts-run-guarded-maze
 mcts-run-risky-shortcut-gridworld
+mcts-run-gambler-jackpot
+mcts-run-laser-tag-safe-grid
+mcts-run-overflow-queue
+mcts-run-risky-ladder
+mcts-run-river-swim-stochastic
+mcts-run-thin-ice-frozen-lake-plus
+mcts-run-two-level-risky-treasure
+mcts-run-two-path-ssp-deceptive
+mcts-tune-bettinggame
