@@ -35,6 +35,7 @@ namespace mcts {
 
             virtual ~PatsoCNode() = default;
             virtual double get_cvar_value() const override;
+            virtual double get_cvar_value_at(double alpha) const override;
             virtual double sample_cvar_value() const override;
 
         protected:

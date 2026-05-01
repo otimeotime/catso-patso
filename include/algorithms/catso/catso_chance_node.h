@@ -69,6 +69,7 @@ namespace mcts {
                 const double trial_cumulative_return,
                 MctsEnvContext& ctx);
             virtual double get_cvar_value() const;
+            virtual double get_cvar_value_at(double alpha) const;
             virtual double get_mean_value() const;
             virtual double sample_cvar_value() const;
             virtual double sample_thompson_value() const;

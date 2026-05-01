@@ -119,6 +119,11 @@ namespace mcts {
     }
 
     double PatsoCNode::get_cvar_value() const {
+        PatsoManager& manager = (PatsoManager&) *mcts_manager;
+        return get_cvar_value_at(manager.cvar_tau);
+    }
+
+    double PatsoCNode::get_cvar_value_at(double alpha) const {
         if (particles.empty() || particle_weights.empty()) {
             return mean_value;
         }
@@ -129,8 +134,7 @@ namespace mcts {
             value_weight_pairs.emplace_back(particles[i], particle_weights[i]);
         }
 
-        PatsoManager& manager = (PatsoManager&) *mcts_manager;
-        return compute_lower_tail_cvar(value_weight_pairs, manager.cvar_tau);
+        return compute_lower_tail_cvar(value_weight_pairs, alpha);
     }
 
     double PatsoCNode::sample_cvar_value() const {

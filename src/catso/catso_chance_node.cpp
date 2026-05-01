@@ -319,6 +319,11 @@ namespace mcts {
     }
 
     double CatsoCNode::get_cvar_value() const {
+        CatsoManager& manager = (CatsoManager&) *mcts_manager;
+        return get_cvar_value_at(manager.cvar_tau);
+    }
+
+    double CatsoCNode::get_cvar_value_at(double alpha) const {
         if (atoms.empty() || dirichlet_counts.empty()) {
             return mean_value;
         }
@@ -329,8 +334,7 @@ namespace mcts {
             value_weight_pairs.emplace_back(atoms[i], dirichlet_counts[i]);
         }
 
-        CatsoManager& manager = (CatsoManager&) *mcts_manager;
-        return compute_lower_tail_cvar(value_weight_pairs, manager.cvar_tau);
+        return compute_lower_tail_cvar(value_weight_pairs, alpha);
     }
 
     double CatsoCNode::sample_cvar_value() const {

@@ -87,6 +87,10 @@ namespace mcts {
     }
 
     double CatsoDNode::compute_power_mean_value() const {
+        // V-backup per paper Eq. (cvar-v-backup) F6: visit-weighted (power-)mean of
+        // per-child CVaR scores ĉ_τ(s,a), evaluated under the posterior-mean Q-edge
+        // weights. The paper's pseudocode uses p=1 (linear); larger p is an
+        // off-paper extension exposed via `power_mean_exponent`.
         const double opp_coeff = is_opponent() ? -1.0 : 1.0;
         vector<pair<double,double>> weighted_values;
 
@@ -103,7 +107,7 @@ namespace mcts {
 
             weighted_values.emplace_back(
                 static_cast<double>(child->num_visits),
-                opp_coeff * child->get_mean_value());
+                opp_coeff * child->get_cvar_value());
         }
         unlock_all_children();
 
@@ -116,6 +120,9 @@ namespace mcts {
         MctsEnvContext& ctx) const
     {
         (void)ctx;
+        // Selection index per paper Eq. (selection) F5 / (cvar_index_main):
+        // CVaR_τ of a fresh Thompson draw from the posterior, plus the polynomial
+        // optimism bonus B(n,s,a) = C·T_s^{1/4}/T_{s,a}^{1/2}.
         const double opp_coeff = is_opponent() ? -1.0 : 1.0;
 
         lock_all_children();
@@ -125,7 +132,7 @@ namespace mcts {
             }
 
             shared_ptr<CatsoCNode> child = get_child_node(action);
-            double score = opp_coeff * child->sample_thompson_value();
+            double score = opp_coeff * child->sample_cvar_value();
             score += compute_optimism_bonus(num_visits, child->num_visits);
             action_values[action] = score;
         }
@@ -163,14 +170,18 @@ namespace mcts {
     }
 
     shared_ptr<const Action> CatsoDNode::recommend_action_best_cvar() const {
+        // Recommendation per paper Eq. F9: argmax_a CVaR_α(D̂_n(s_0,a)) where the
+        // recommendation level α may be decoupled from the backup level τ.
+        // Defaults to α = τ (sentinel handling lives in CatsoManager's ctor).
         const double opp_coeff = is_opponent() ? -1.0 : 1.0;
+        const double alpha = static_cast<const CatsoManager&>(*mcts_manager).recommend_alpha;
         unordered_map<shared_ptr<const Action>,double> action_values;
 
         for (shared_ptr<const Action> action : *actions) {
             if (!has_child_node(action)) {
                 continue;
             }
-            action_values[action] = opp_coeff * get_child_node(action)->get_cvar_value();
+            action_values[action] = opp_coeff * get_child_node(action)->get_cvar_value_at(alpha);
         }
 
         if (action_values.empty()) {

@@ -1,6 +1,7 @@
 # Hidden files
 .vscode
 .DS_Store
+docs/
 CLAUDE.md
 Beyond_Expected_Values__Risk_Sensitive_Planningwith_Distributional_Monte_Carlo_Tree_Search.pdf
 
