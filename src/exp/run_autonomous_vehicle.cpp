@@ -414,15 +414,12 @@ int main(int argc, char** argv) {
     const double reward_normalisation = mcts::exp::AutonomousVehicleEnv::default_reward_normalisation;
     const double cvar_tau = 0.05;
     const int horizon = max_steps;
-    const int eval_rollouts = 200;
-    const int runs = 3;
+    const int eval_rollouts = 50;
+    const int runs = 2;
     const int threads = 8;
     const int base_seed = 4242;
 
-    vector<int> trial_counts;
-    for (int i = 1; i <= 30; ++i) {
-        trial_counts.push_back(i * 1000);
-    }
+    vector<int> trial_counts = {2000, 10000};
 
     auto env = make_shared<mcts::exp::AutonomousVehicleEnv>(
         horizontal_edges,

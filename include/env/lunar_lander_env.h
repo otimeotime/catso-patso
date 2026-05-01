@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 
 namespace mcts::exp {
@@ -17,6 +18,13 @@ namespace mcts::exp {
             int step;
             int status;
             int last_bonus_outcome;
+
+            // Aggregated tuple key. Required by `discrete_runner_common.h::CvarOracle`,
+            // which extracts the memo key via `decltype(state.state)`. Mirrors the
+            // .state convention of Int3TupleState / Int4TupleState. Initialised
+            // exactly once in the constructor; the individual fields above are read
+            // by hot paths and we leave them in place for ergonomics.
+            std::tuple<int, int, int, int, int, int, int, int> state;
 
             LunarLanderState(
                 int x,
@@ -34,7 +42,8 @@ namespace mcts::exp {
                   angle(angle),
                   step(step),
                   status(status),
-                  last_bonus_outcome(last_bonus_outcome) {}
+                  last_bonus_outcome(last_bonus_outcome),
+                  state(x, y, vx, vy, angle, step, status, last_bonus_outcome) {}
             virtual ~LunarLanderState() = default;
 
             virtual std::size_t hash() const override;

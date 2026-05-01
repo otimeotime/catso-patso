@@ -1,0 +1,36 @@
+# Per-algorithm hyperparameter search spaces.
+# Each entry maps a param name to {type, low, high, [log], [step]}.
+# Types: int | float | categorical
+# - log: sample on a log scale (recommended for scale-invariant params like
+#        optimism_constant whose useful range may span >1 order of magnitude)
+#
+# Defaults reflect the paper's swept ranges (see readme_exp.md §6) widened
+# slightly so TPE can explore the boundaries.
+
+# `power_mean` is intentionally NOT a search-space dimension. The paper analyses
+# p=1 (linear visit-weighted backup) only; p>1 is an off-paper extension. The
+# tune driver hardcodes --power-mean 1.0 when invoking the eval binary.
+
+CATSO:
+  n_atoms:
+    type: int
+    low: 21
+    high: 151
+    step: 10
+  optimism:
+    type: float
+    low: 0.5
+    high: 32.0
+    log: true
+
+PATSO:
+  max_particles:
+    type: int
+    low: 32
+    high: 512
+    log: true
+  optimism:
+    type: float
+    low: 0.5
+    high: 32.0
+    log: true

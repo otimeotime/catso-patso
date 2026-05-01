@@ -1,0 +1,57 @@
+# Per-environment evaluation settings used by tune/tune.py.
+# These mirror the constants compiled into the corresponding run_<env>.cpp / eval_<env>
+# binaries. Change here, not in the C++.
+#
+# `binary`           : path to the eval-mode binary (relative to repo root)
+# `cvar_tau`         : backup level τ; recommendation level α defaults to τ
+# `trial_budget`     : MCTS planning budget (number of trials per seed)
+# `num_seeds`        : seeds per trial (>=3 for noise control; 5 for paper-grade)
+# `eval_rollouts`    : MC rollouts used to estimate metrics from each finished tree
+# `threads`          : MctsPool worker threads
+# `horizon`          : planner horizon — env-specific
+# `base_seed`        : RNG seed offset; deterministic given (algo, seed_idx)
+
+bettinggame:
+  binary: mcts-eval-bettinggame
+  cvar_tau: 0.25
+  trial_budget: 10000
+  num_seeds: 3
+  eval_rollouts: 100
+  threads: 8
+  horizon: 6
+  base_seed: 4242
+
+autonomous_vehicle:
+  binary: mcts-eval-autonomous-vehicle
+  cvar_tau: 0.05
+  trial_budget: 10000
+  num_seeds: 3
+  eval_rollouts: 100
+  threads: 8
+  horizon: 8
+  base_seed: 4242
+
+guarded_maze:
+  binary: mcts-eval-guarded-maze
+  cvar_tau: 0.05
+  # Guarded Maze trees grow much larger per trial than Betting Game (long
+  # horizon, branching, full memo'd oracle). 5k trials/seed is a reasonable
+  # tuning fidelity; raise once the search-space contour is clear.
+  trial_budget: 5000
+  num_seeds: 3
+  eval_rollouts: 100
+  threads: 8
+  horizon: 500
+  base_seed: 4242
+
+lunar_lander:
+  binary: mcts-eval-lunar-lander
+  cvar_tau: 0.05
+  # Oracle solve: ~8s on the default 200-step horizon. Per-seed planning at 10k
+  # trials is fast (~0.5s), so this is dominated by oracle wall-clock.
+  trial_budget: 10000
+  num_seeds: 3
+  eval_rollouts: 100
+  threads: 8
+  horizon: 200
+  base_seed: 4242

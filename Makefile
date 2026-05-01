@@ -63,6 +63,22 @@ RUN_TAXI_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(RUN_TAXI_SOURCES))
 RUN_BETTINGGAME_SOURCES = src/exp/run_bettinggame.cpp
 RUN_BETTINGGAME_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(RUN_BETTINGGAME_SOURCES))
 
+# BettingGame single-config evaluator (driven by tune/tune.py)
+EVAL_BETTINGGAME_SOURCES = src/exp/eval_bettinggame.cpp
+EVAL_BETTINGGAME_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(EVAL_BETTINGGAME_SOURCES))
+
+# Autonomous Vehicle single-config evaluator
+EVAL_AUTONOMOUS_VEHICLE_SOURCES = src/exp/eval_autonomous_vehicle.cpp
+EVAL_AUTONOMOUS_VEHICLE_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(EVAL_AUTONOMOUS_VEHICLE_SOURCES))
+
+# Guarded Maze single-config evaluator
+EVAL_GUARDED_MAZE_SOURCES = src/exp/eval_guarded_maze.cpp
+EVAL_GUARDED_MAZE_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(EVAL_GUARDED_MAZE_SOURCES))
+
+# Lunar Lander single-config evaluator
+EVAL_LUNAR_LANDER_SOURCES = src/exp/eval_lunar_lander.cpp
+EVAL_LUNAR_LANDER_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(EVAL_LUNAR_LANDER_SOURCES))
+
 # Risky Shortcut Gridworld experiment
 RUN_RISKY_SHORTCUT_GRIDWORLD_SOURCES = src/exp/run_risky_shortcut_gridworld.cpp
 RUN_RISKY_SHORTCUT_GRIDWORLD_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(RUN_RISKY_SHORTCUT_GRIDWORLD_SOURCES))
@@ -151,6 +167,10 @@ TARGET_MCTS_TUNE_SAILING = mcts-tune-sailing
 TARGET_MCTS_TUNE_TAXI = mcts-tune-taxi
 TARGET_MCTS_TUNE_STREE = mcts-tune-stree
 TARGET_MCTS_TUNE_BETTINGGAME = mcts-tune-bettinggame
+TARGET_MCTS_EVAL_BETTINGGAME = mcts-eval-bettinggame
+TARGET_MCTS_EVAL_AUTONOMOUS_VEHICLE = mcts-eval-autonomous-vehicle
+TARGET_MCTS_EVAL_GUARDED_MAZE = mcts-eval-guarded-maze
+TARGET_MCTS_EVAL_LUNAR_LANDER = mcts-eval-lunar-lander
 TARGET_MCTS_RUN = mcts-run-frozenlake
 TARGET_MCTS_RUN_SAILING = mcts-run-sailing
 TARGET_MCTS_RUN_TAXI = mcts-run-taxi
@@ -193,6 +213,10 @@ DEPFILES = \
 	$(TUNE_TAXI_OBJECTS:.o=.d) \
 	$(TUNE_STREE_OBJECTS:.o=.d) \
 	$(TUNE_BETTINGGAME_OBJECTS:.o=.d) \
+	$(EVAL_BETTINGGAME_OBJECTS:.o=.d) \
+	$(EVAL_AUTONOMOUS_VEHICLE_OBJECTS:.o=.d) \
+	$(EVAL_GUARDED_MAZE_OBJECTS:.o=.d) \
+	$(EVAL_LUNAR_LANDER_OBJECTS:.o=.d) \
 	$(RUN_OBJECTS:.o=.d) \
 	$(RUN_SAILING_OBJECTS:.o=.d) \
 	$(RUN_TAXI_OBJECTS:.o=.d) \
@@ -269,6 +293,26 @@ $(TUNE_STREE_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 
 # Build betting game tuner object files rule
 $(TUNE_BETTINGGAME_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
+
+# Build betting game eval object files rule
+$(EVAL_BETTINGGAME_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
+
+# Build autonomous vehicle eval object files rule
+$(EVAL_AUTONOMOUS_VEHICLE_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
+
+# Build guarded maze eval object files rule
+$(EVAL_GUARDED_MAZE_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
+
+# Build lunar lander eval object files rule
+$(EVAL_LUNAR_LANDER_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
 	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
@@ -421,6 +465,22 @@ $(TARGET_MCTS_TUNE_STREE): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(TUNE_STREE_OBJECTS
 $(TARGET_MCTS_TUNE_BETTINGGAME): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(TUNE_BETTINGGAME_OBJECTS)
 	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
 
+# Build BettingGame single-config evaluator (driven by tune/tune.py)
+$(TARGET_MCTS_EVAL_BETTINGGAME): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(EVAL_BETTINGGAME_OBJECTS)
+	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Build Autonomous Vehicle single-config evaluator
+$(TARGET_MCTS_EVAL_AUTONOMOUS_VEHICLE): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(EVAL_AUTONOMOUS_VEHICLE_OBJECTS)
+	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Build Guarded Maze single-config evaluator
+$(TARGET_MCTS_EVAL_GUARDED_MAZE): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(EVAL_GUARDED_MAZE_OBJECTS)
+	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Build Lunar Lander single-config evaluator
+$(TARGET_MCTS_EVAL_LUNAR_LANDER): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(EVAL_LUNAR_LANDER_OBJECTS)
+	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
+
 # Build FrozenLake experiment with tuned parameters
 $(TARGET_MCTS_RUN): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(RUN_OBJECTS)
 	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
@@ -535,6 +595,10 @@ clean:
 	@[ -f $(TARGET_MCTS_TUNE_TAXI) ] && @rm $(TARGET_MCTS_TUNE_TAXI) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_TUNE_STREE) ] && @rm $(TARGET_MCTS_TUNE_STREE) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_TUNE_BETTINGGAME) ] && @rm $(TARGET_MCTS_TUNE_BETTINGGAME) > /dev/null 2> /dev/null || :
+	@[ -f $(TARGET_MCTS_EVAL_BETTINGGAME) ] && @rm $(TARGET_MCTS_EVAL_BETTINGGAME) > /dev/null 2> /dev/null || :
+	@[ -f $(TARGET_MCTS_EVAL_AUTONOMOUS_VEHICLE) ] && @rm $(TARGET_MCTS_EVAL_AUTONOMOUS_VEHICLE) > /dev/null 2> /dev/null || :
+	@[ -f $(TARGET_MCTS_EVAL_GUARDED_MAZE) ] && @rm $(TARGET_MCTS_EVAL_GUARDED_MAZE) > /dev/null 2> /dev/null || :
+	@[ -f $(TARGET_MCTS_EVAL_LUNAR_LANDER) ] && @rm $(TARGET_MCTS_EVAL_LUNAR_LANDER) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_RUN) ] && @rm $(TARGET_MCTS_RUN) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_RUN_SAILING) ] && @rm $(TARGET_MCTS_RUN_SAILING) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_RUN_TAXI) ] && @rm $(TARGET_MCTS_RUN_TAXI) > /dev/null 2> /dev/null || :
@@ -562,4 +626,4 @@ clean:
 #####
 # Phony targets, so make knows when a target isn't producing a corresponding output file of same name
 #####
-.PHONY: clean $(TARGET_MCTS) $(TARGET_MCTS_TUNE) $(TARGET_MCTS_TUNE_SAILING) $(TARGET_MCTS_TUNE_TAXI) $(TARGET_MCTS_TUNE_STREE) $(TARGET_MCTS_TUNE_BETTINGGAME) $(TARGET_MCTS_RUN) $(TARGET_MCTS_RUN_SAILING) $(TARGET_MCTS_RUN_TAXI) $(TARGET_MCTS_RUN_BETTINGGAME) $(TARGET_MCTS_RUN_RISKY_SHORTCUT_GRIDWORLD) $(TARGET_MCTS_RUN_AUTONOMOUS_VEHICLE) $(TARGET_MCTS_RUN_GUARDED_MAZE) $(TARGET_MCTS_RUN_THIN_ICE_FROZEN_LAKE_PLUS) $(TARGET_MCTS_RUN_OVERFLOW_QUEUE) $(TARGET_MCTS_RUN_GAMBLER_JACKPOT) $(TARGET_MCTS_RUN_RISKY_LADDER) $(TARGET_MCTS_RUN_TWO_PATH_SSP_DECEPTIVE) $(TARGET_MCTS_RUN_LASER_TAG_SAFE_GRID) $(TARGET_MCTS_RUN_RIVER_SWIM_STOCHASTIC) $(TARGET_MCTS_RUN_TWO_LEVEL_RISKY_TREASURE) $(TARGET_MCTS_RUN_STREE) $(TARGET_MCTS_VarDE_DBG) $(TARGET_MCTS_DENTS_DBG) $(TARGET_MCTS_VarDE_DBG_SAILING) $(TARGET_MCTS_DENTS_DBG_SAILING) $(TARGET_MCTS_VarDE_DBG_TAXI) $(TARGET_MCTS_DENTS_DBG_TAXI) $(TARGET_MCTS_VarDE_DBG_STREE) $(TARGET_MCTS_DENTS_DBG_STREE)
+.PHONY: clean $(TARGET_MCTS) $(TARGET_MCTS_TUNE) $(TARGET_MCTS_TUNE_SAILING) $(TARGET_MCTS_TUNE_TAXI) $(TARGET_MCTS_TUNE_STREE) $(TARGET_MCTS_TUNE_BETTINGGAME) $(TARGET_MCTS_EVAL_BETTINGGAME) $(TARGET_MCTS_EVAL_AUTONOMOUS_VEHICLE) $(TARGET_MCTS_EVAL_GUARDED_MAZE) $(TARGET_MCTS_RUN) $(TARGET_MCTS_RUN_SAILING) $(TARGET_MCTS_RUN_TAXI) $(TARGET_MCTS_RUN_BETTINGGAME) $(TARGET_MCTS_RUN_RISKY_SHORTCUT_GRIDWORLD) $(TARGET_MCTS_RUN_AUTONOMOUS_VEHICLE) $(TARGET_MCTS_RUN_GUARDED_MAZE) $(TARGET_MCTS_RUN_THIN_ICE_FROZEN_LAKE_PLUS) $(TARGET_MCTS_RUN_OVERFLOW_QUEUE) $(TARGET_MCTS_RUN_GAMBLER_JACKPOT) $(TARGET_MCTS_RUN_RISKY_LADDER) $(TARGET_MCTS_RUN_TWO_PATH_SSP_DECEPTIVE) $(TARGET_MCTS_RUN_LASER_TAG_SAFE_GRID) $(TARGET_MCTS_RUN_RIVER_SWIM_STOCHASTIC) $(TARGET_MCTS_RUN_TWO_LEVEL_RISKY_TREASURE) $(TARGET_MCTS_RUN_STREE) $(TARGET_MCTS_VarDE_DBG) $(TARGET_MCTS_DENTS_DBG) $(TARGET_MCTS_VarDE_DBG_SAILING) $(TARGET_MCTS_DENTS_DBG_SAILING) $(TARGET_MCTS_VarDE_DBG_TAXI) $(TARGET_MCTS_DENTS_DBG_TAXI) $(TARGET_MCTS_VarDE_DBG_STREE) $(TARGET_MCTS_DENTS_DBG_STREE)

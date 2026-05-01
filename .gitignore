@@ -67,3 +67,11 @@ mcts-run-thin-ice-frozen-lake-plus
 mcts-run-two-level-risky-treasure
 mcts-run-two-path-ssp-deceptive
 mcts-tune-bettinggame
+mcts-eval-bettinggame
+mcts-eval-autonomous-vehicle
+mcts-eval-guarded-maze
+
+# Tuning artifacts
+tune/results/
+*.db
+*.db-journal
