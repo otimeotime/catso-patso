@@ -157,8 +157,40 @@ def run_eval(cmd: list[str]) -> dict[str, Any]:
 
 
 # ------------------------------------------------------------------- objective
+#
+# Available tuning objectives:
+#   cvar_regret  — minimize oracle-defined regret on the root pick. Exact, but
+#                  saturates to 0 on envs where the optimal first move is easy
+#                  (e.g. autonomous_vehicle), giving TPE no signal.
+#   mc_cvar      — maximize empirical CVaR_τ of MC rollout returns (we minimize
+#                  -mc_cvar). Continuous signal, but noisier. Right default for
+#                  envs where regret saturates.
+#   hybrid       — soft lexicographic: penalize regret>0 heavily, then pick by
+#                  mc_cvar among regret=0 configs. Good universal default.
+OBJECTIVES = ("cvar_regret", "mc_cvar", "hybrid")
+HYBRID_REGRET_PENALTY = 100.0
 
-def make_objective(env: str, algo: str, cfg: EnvConfig, space: dict):
+
+def compute_objective_value(metrics: dict, objective: str) -> float:
+    regret = metrics.get("cvar_regret")
+    mc_cvar = metrics.get("mc_cvar")
+    if regret is None and objective in ("cvar_regret", "hybrid"):
+        return float("inf")
+    if mc_cvar is None and objective in ("mc_cvar", "hybrid"):
+        return float("inf")
+
+    if objective == "cvar_regret":
+        return float(regret)
+    if objective == "mc_cvar":
+        # Higher mc_cvar = better tail; Optuna minimizes, so negate.
+        return -float(mc_cvar)
+    if objective == "hybrid":
+        regret_term = max(0.0, float(regret)) * HYBRID_REGRET_PENALTY
+        return regret_term + (-float(mc_cvar))
+    raise ValueError(f"unknown objective {objective!r}")
+
+
+def make_objective(env: str, algo: str, cfg: EnvConfig, space: dict, objective: str):
     binary = ROOT / cfg.binary
     if not binary.exists():
         raise SystemExit(
@@ -166,7 +198,7 @@ def make_objective(env: str, algo: str, cfg: EnvConfig, space: dict):
             f"build it first:  make {cfg.binary}"
         )
 
-    def objective(trial: optuna.Trial) -> float:
+    def objective_fn(trial: optuna.Trial) -> float:
         params = sample_params(trial, space)
         cmd = build_cmd(binary, algo, params, cfg)
         t0 = time.time()
@@ -177,18 +209,13 @@ def make_objective(env: str, algo: str, cfg: EnvConfig, space: dict):
         for k, v in metrics.items():
             trial.set_user_attr(k, v)
         trial.set_user_attr("driver_wall_sec", wall)
+        trial.set_user_attr("tuning_objective", objective)
         for k, v in params.items():
             trial.set_user_attr(f"param_{k}", v)
 
-        regret = metrics.get("cvar_regret")
-        if regret is None:
-            # Fallback: penalize. Optuna won't reach this normally because the
-            # binary always emits a regret unless the recommended action's CVaR
-            # is unknown to the oracle (shouldn't happen for these envs).
-            return float("inf")
-        return float(regret)
+        return compute_objective_value(metrics, objective)
 
-    return objective
+    return objective_fn
 
 
 # -------------------------------------------------------------------- artifacts
@@ -242,6 +269,10 @@ def main() -> int:
                         help="Skip optimization; print best params from existing study and exit.")
     parser.add_argument("--seed", type=int, default=12345,
                         help="TPE sampler seed (for reproducibility of the search itself).")
+    parser.add_argument("--objective", choices=OBJECTIVES, default="hybrid",
+                        help="tuning objective. Default 'hybrid' (regret hard-penalty + "
+                             "-mc_cvar). 'mc_cvar' for envs where regret saturates. "
+                             "'cvar_regret' for paper-faithful regret-only.")
     args = parser.parse_args()
 
     cfg = load_env_config(args.env)
@@ -276,21 +307,25 @@ def main() -> int:
         }, indent=2, default=str))
         return 0
 
-    objective = make_objective(args.env, args.algo, cfg, space)
+    objective_fn = make_objective(args.env, args.algo, cfg, space, args.objective)
 
     print(f"[tune] env={args.env} algo={args.algo} study={study_name} "
           f"n_trials={args.n_trials} db={db_path}", file=sys.stderr)
     print(f"[tune] env_config={cfg}", file=sys.stderr)
     print(f"[tune] search_space={list(space.keys())}", file=sys.stderr)
+    print(f"[tune] objective={args.objective}", file=sys.stderr)
 
-    study.optimize(objective, n_trials=args.n_trials, show_progress_bar=False)
+    study.optimize(objective_fn, n_trials=args.n_trials, show_progress_bar=False)
 
     write_best_json(study, out_dir / "best.json")
     write_trials_csv(study, out_dir / "trials.csv")
 
     if study.best_trial is not None:
-        print(f"\n[tune] best cvar_regret = {study.best_trial.value:.6g}", file=sys.stderr)
-        print(f"[tune] best params = {study.best_trial.params}", file=sys.stderr)
+        bt = study.best_trial
+        print(f"\n[tune] best objective ({args.objective}) = {bt.value:.6g}", file=sys.stderr)
+        print(f"[tune] best cvar_regret = {bt.user_attrs.get('cvar_regret'):.6g}, "
+              f"mc_cvar = {bt.user_attrs.get('mc_cvar'):.6g}", file=sys.stderr)
+        print(f"[tune] best params = {bt.params}", file=sys.stderr)
         print(f"[tune] artifacts: {out_dir}/best.json, {out_dir}/trials.csv, {db_path}",
               file=sys.stderr)
     return 0
