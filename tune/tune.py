@@ -293,6 +293,23 @@ def main() -> int:
         load_if_exists=True,
     )
 
+    # Guard against mixing objectives in one study: Optuna stores `value` as one
+    # column with no provenance, so trials scored under different objectives are
+    # silently incomparable. Tag the study on first use; refuse to reuse with a
+    # mismatched objective.
+    stored_obj = study.user_attrs.get("tuning_objective")
+    if stored_obj is None:
+        study.set_user_attr("tuning_objective", args.objective)
+    elif stored_obj != args.objective:
+        raise SystemExit(
+            f"study {study_name!r} was created with objective={stored_obj!r}, "
+            f"but you passed --objective {args.objective!r}. Mixing objectives in "
+            f"one study breaks `best_trial` and TPE's posterior. Either use "
+            f"--study-name with a fresh name, or delete the old study:\n"
+            f"  python3 -c \"import optuna; optuna.delete_study(study_name='{study_name}', "
+            f"storage='{storage}')\""
+        )
+
     if args.best_only:
         if study.best_trial is None:
             print("no completed trials in study", file=sys.stderr)
