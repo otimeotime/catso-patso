@@ -9,6 +9,48 @@ using namespace std;
 
 
 namespace mcts {
+    namespace {
+        double sample_random_rollout_return(
+            const shared_ptr<MctsManager>& mcts_manager,
+            shared_ptr<const State> state,
+            int decision_depth)
+        {
+            if (state == nullptr || mcts_manager == nullptr || mcts_manager->mcts_env == nullptr) {
+                return 0.0;
+            }
+
+            double rollout_return = 0.0;
+            int cur_depth = decision_depth;
+
+            while (cur_depth < mcts_manager->max_depth &&
+                   !mcts_manager->mcts_env->is_sink_state_itfc(state)) {
+                shared_ptr<ActionVector> actions = mcts_manager->mcts_env->get_valid_actions_itfc(state);
+                if (actions == nullptr || actions->empty()) {
+                    break;
+                }
+
+                const int action_idx = mcts_manager->get_rand_int(0, static_cast<int>(actions->size()));
+                shared_ptr<const Action> action = actions->at(static_cast<size_t>(action_idx));
+                shared_ptr<const State> next_state =
+                    mcts_manager->mcts_env->sample_transition_distribution_itfc(
+                        state,
+                        action,
+                        *mcts_manager);
+                shared_ptr<const Observation> observation =
+                    mcts_manager->mcts_env->sample_observation_distribution_itfc(
+                        action,
+                        next_state,
+                        *mcts_manager);
+
+                rollout_return += mcts_manager->mcts_env->get_reward_itfc(state, action, observation);
+                state = next_state;
+                cur_depth += 1;
+            }
+
+            return rollout_return;
+        }
+    }
+
     /**
      * Constructor.
      * 
@@ -118,8 +160,8 @@ namespace mcts {
      * Throughout the function, whenever a decision/chance node is being used in a function/has function being called, 
      * it is protected by its appropriate lock.
      * 
-     * At the end, to make the list of rewards sum to the total return of the trial (consider when the heuristic_fn is 
-     * a rollout), we also add the heuristic_value of the last node considered this trial.
+     * At the end we add a sampled continuation value from the final decision node, computed by a random rollout from
+     * that node's state using the remaining depth budget.
      */
     void MctsPool::run_selection_phase(
         vector<pair<shared_ptr<MctsDNode>,shared_ptr<MctsCNode>>>& nodes_to_backup, 
@@ -158,11 +200,14 @@ namespace mcts {
             cur_node = decision_node;
         }
 
-        // visit the final node and add heuristic value to list of rewards at end
+        // Visit the final node and add a random-rollout continuation estimate at the end.
         cur_node->lock();
         cur_node->visit_itfc(context);
-        rewards.push_back(cur_node->heuristic_value);
+        const shared_ptr<const State> leaf_state = cur_node->state;
+        const int leaf_depth = cur_node->decision_depth;
         cur_node->unlock();
+
+        rewards.push_back(sample_random_rollout_return(mcts_manager, leaf_state, leaf_depth));
     }
 
 

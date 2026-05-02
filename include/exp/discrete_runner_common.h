@@ -75,6 +75,17 @@ namespace mcts::exp::runner {
         double sum_catastrophic_count = 0.0;
     };
 
+    struct SimpleEvalStats {
+        double cvar_return;
+        double cvar_stddev;
+    };
+
+    struct SimpleSummaryAccumulator {
+        int count = 0;
+        double sum_cvar_return = 0.0;
+        double sum_cvar_stddev = 0.0;
+    };
+
     inline double compute_lower_tail_cvar(const ReturnDistribution& distribution, double tau) {
         if (distribution.empty()) {
             return 0.0;
@@ -322,9 +333,29 @@ namespace mcts::exp::runner {
             }
         }
 
-        const auto action_cvar_it = root_solution.action_cvars.find(recommended_action_id);
-        if (action_cvar_it != root_solution.action_cvars.end()) {
-            metrics.cvar_regret = root_solution.optimal_cvar - action_cvar_it->second;
+        const auto catso_root = std::dynamic_pointer_cast<const mcts::CatsoDNode>(root);
+        if (catso_root != nullptr) {
+            auto mutable_catso_root = std::const_pointer_cast<mcts::CatsoDNode>(catso_root);
+            auto root_actions = env->get_valid_actions_itfc(env->get_initial_state_itfc());
+
+            double max_root_action_cvar = std::numeric_limits<double>::lowest();
+            bool found_action_cvar = false;
+            for (const auto& action : *root_actions) {
+                std::shared_ptr<mcts::CatsoCNode> child;
+                if (mutable_catso_root->has_child_node(action)) {
+                    child = mutable_catso_root->get_child_node(action);
+                }
+                else {
+                    child = mutable_catso_root->create_child_node(action);
+                }
+
+                max_root_action_cvar = std::max(max_root_action_cvar, child->get_cvar_value());
+                found_action_cvar = true;
+            }
+
+            if (found_action_cvar) {
+                metrics.cvar_regret = root_solution.optimal_cvar - max_root_action_cvar;
+            }
         }
 
         return metrics;
@@ -335,16 +366,18 @@ namespace mcts::exp::runner {
         int catso_n_atoms = 100,
         double optimism = 4.0,
         double power_mean_exponent = 1.0,
-        int patso_particles = 100)
+        int patso_particles = 100,
+        double patso_optimism = 4.0,
+        double uct_epsilon = 0.1)
     {
         std::vector<Candidate> cands;
 
-        cands.push_back({"UCT", "bias=auto,epsilon=0.1", [](auto env, auto init_state, int max_depth, int seed) {
+        cands.push_back({"UCT", "bias=auto,epsilon=" + std::to_string(uct_epsilon), [=](auto env, auto init_state, int max_depth, int seed) {
             mcts::UctManagerArgs args(env);
             args.max_depth = max_depth;
             args.mcts_mode = false;
             args.bias = mcts::UctManagerArgs::USE_AUTO_BIAS;
-            args.epsilon_exploration = 0.1;
+            args.epsilon_exploration = uct_epsilon;
             args.seed = seed;
             auto mgr = std::make_shared<mcts::UctManager>(args);
             auto root = std::make_shared<mcts::UctDNode>(mgr, init_state, 0, 0);
@@ -374,7 +407,7 @@ namespace mcts::exp::runner {
             }});
 
         cands.push_back({"PATSO", "max_particles=" + std::to_string(patso_particles)
-                + ",optimism=" + std::to_string(optimism)
+                + ",optimism=" + std::to_string(patso_optimism)
                 + ",p=" + std::to_string(power_mean_exponent)
                 + ",tau=" + std::to_string(cvar_tau),
             [=](auto env, auto init_state, int max_depth, int seed) {
@@ -382,7 +415,7 @@ namespace mcts::exp::runner {
                 args.max_depth = max_depth;
                 args.mcts_mode = false;
                 args.max_particles = patso_particles;
-                args.optimism_constant = optimism;
+                args.optimism_constant = patso_optimism;
                 args.power_mean_exponent = power_mean_exponent;
                 args.cvar_tau = cvar_tau;
                 args.seed = seed;
@@ -394,6 +427,23 @@ namespace mcts::exp::runner {
             }});
 
         return cands;
+    }
+
+    template <typename EnvT>
+    SimpleEvalStats evaluate_cvar_only(
+        std::shared_ptr<const EnvT> env,
+        std::shared_ptr<const mcts::MctsDNode> root,
+        int horizon,
+        int rollouts,
+        int threads,
+        int seed,
+        double cvar_tau)
+    {
+        mcts::RandManager eval_rng(seed);
+        mcts::EvalPolicy policy(root, env, eval_rng);
+        mcts::MCEvaluator evaluator(env, policy, horizon, eval_rng);
+        evaluator.run_rollouts(rollouts, threads);
+        return {evaluator.get_cvar_return(cvar_tau), evaluator.get_stddev_cvar(cvar_tau)};
     }
 
     template <typename EnvT, typename StateT, typename CatastropheFn>
@@ -413,14 +463,23 @@ namespace mcts::exp::runner {
         const std::string& summary_csv,
         CatastropheFn catastrophe_fn,
         int catso_n_atoms = 100,
-        double optimism = 4.0,
+        double catso_optimism = 4.0,
         double power_mean_exponent = 1.0,
-        int patso_particles = 100)
+        int patso_particles = 100,
+        double patso_optimism = 4.0,
+        double uct_epsilon = 0.1)
     {
         const std::shared_ptr<const EnvT> const_env = env;
         std::shared_ptr<const StateT> typed_init_state = env->get_initial_state();
         std::shared_ptr<const mcts::State> init_state = env->get_initial_state_itfc();
-        auto candidates = build_candidates(cvar_tau, catso_n_atoms, optimism, power_mean_exponent, patso_particles);
+        auto candidates = build_candidates(
+            cvar_tau,
+            catso_n_atoms,
+            catso_optimism,
+            power_mean_exponent,
+            patso_particles,
+            patso_optimism,
+            uct_epsilon);
         CvarOracle<EnvT, StateT> oracle(const_env, cvar_tau);
         const auto& root_solution = oracle.solve_state(typed_init_state);
         std::map<std::pair<std::string, int>, SummaryAccumulator> summary_by_algo_and_trial;
@@ -526,6 +585,129 @@ namespace mcts::exp::runner {
                 << "," << mean_cvar_regret
                 << "," << (summary.sum_optimal_action_hit / static_cast<double>(summary.count))
                 << "," << (summary.sum_catastrophic_count / static_cast<double>(summary.count))
+                << "\n";
+        }
+
+        std::cout << "\nResults written to " << results_csv << " and " << summary_csv << "\n";
+        return 0;
+    }
+
+    template <typename EnvT>
+    int run_simple_experiment(
+        const std::string& env_id,
+        const std::string& display_name,
+        const std::string& extra_info,
+        std::shared_ptr<EnvT> env,
+        int horizon,
+        double cvar_tau,
+        int eval_rollouts,
+        int runs,
+        int threads,
+        int base_seed,
+        const std::vector<int>& trial_counts,
+        const std::string& results_csv,
+        const std::string& summary_csv,
+        int catso_n_atoms = 100,
+        double catso_optimism = 4.0,
+        double power_mean_exponent = 1.0,
+        int patso_particles = 100,
+        double patso_optimism = 4.0,
+        double uct_epsilon = 0.1)
+    {
+        const std::shared_ptr<const EnvT> const_env = env;
+        std::shared_ptr<const mcts::State> init_state = env->get_initial_state_itfc();
+        auto candidates = build_candidates(
+            cvar_tau,
+            catso_n_atoms,
+            catso_optimism,
+            power_mean_exponent,
+            patso_particles,
+            patso_optimism,
+            uct_epsilon);
+        std::map<std::pair<std::string, int>, SimpleSummaryAccumulator> summary_by_algo_and_trial;
+
+        std::ofstream out(results_csv, std::ios::out | std::ios::trunc);
+        out << std::setprecision(17);
+        out << "env,algorithm,run,trial,cvar_return,cvar_stddev\n";
+
+        std::cout << "[exp] " << display_name;
+        if (!extra_info.empty()) {
+            std::cout << ", " << extra_info;
+        }
+        std::cout << ", cvar_tau=" << cvar_tau << ", horizon=" << horizon << "\n";
+        std::cout << "  Algorithms: " << candidates.size()
+                  << ", Runs: " << runs
+                  << ", Trial counts: " << trial_counts.size()
+                  << "\n";
+
+        for (const auto& cand : candidates) {
+            bool printed_config = false;
+
+            for (int run = 0; run < runs; ++run) {
+                const int seed = base_seed + 1000 * run
+                    + static_cast<int>(std::hash<std::string>{}(cand.algo) % 997);
+
+                auto [mgr, root] = cand.make(
+                    std::static_pointer_cast<mcts::MctsEnv>(env),
+                    init_state,
+                    horizon,
+                    seed);
+                if (!printed_config) {
+                    const std::string runtime_config =
+                        mcts::exp::describe_manager_config(std::static_pointer_cast<const mcts::MctsManager>(mgr));
+                    std::cout << "\nRunning " << cand.algo;
+                    if (!runtime_config.empty()) {
+                        std::cout << " [" << runtime_config << "]";
+                    }
+                    else if (!cand.config.empty()) {
+                        std::cout << " [" << cand.config << "]";
+                    }
+                    std::cout << "...\n";
+                    printed_config = true;
+                }
+                auto pool = std::make_unique<mcts::MctsPool>(mgr, root, threads);
+
+                int trials_so_far = 0;
+                for (int target_trials : trial_counts) {
+                    const int trials_to_add = target_trials - trials_so_far;
+                    if (trials_to_add > 0) {
+                        pool->run_trials(trials_to_add, std::numeric_limits<double>::max(), true);
+                        trials_so_far = target_trials;
+                    }
+
+                    const auto stats = evaluate_cvar_only(
+                        const_env,
+                        root,
+                        horizon,
+                        eval_rollouts,
+                        threads,
+                        seed + 777,
+                        cvar_tau);
+                    out << env_id << "," << cand.algo << "," << run
+                        << "," << target_trials
+                        << "," << stats.cvar_return
+                        << "," << stats.cvar_stddev
+                        << "\n";
+
+                    SimpleSummaryAccumulator& summary = summary_by_algo_and_trial[{cand.algo, target_trials}];
+                    summary.count++;
+                    summary.sum_cvar_return += stats.cvar_return;
+                    summary.sum_cvar_stddev += stats.cvar_stddev;
+                }
+
+                std::cout << "  " << cand.algo << " run " << (run + 1) << "/" << runs << " done\n";
+            }
+        }
+
+        std::ofstream summary_out(summary_csv, std::ios::out | std::ios::trunc);
+        summary_out << std::setprecision(17);
+        summary_out << "env,algorithm,trial,cvar_return,cvar_stddev\n";
+        for (const auto& [algo_trial, summary] : summary_by_algo_and_trial) {
+            const std::string& algo = algo_trial.first;
+            const int trial = algo_trial.second;
+            summary_out << env_id << "," << algo << "," << trial
+                << "," << (summary.sum_cvar_return / static_cast<double>(summary.count))
+                << "," << (summary.sum_cvar_stddev / static_cast<double>(summary.count))
                 << "\n";
         }
 

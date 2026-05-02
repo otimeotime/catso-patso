@@ -14,7 +14,7 @@
 CATSO:
   n_atoms:
     type: int
-    low: 21
+    low: 5
     high: 151
     step: 10
   optimism:

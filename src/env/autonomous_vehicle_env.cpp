@@ -81,32 +81,38 @@ namespace mcts::exp {
     }
 
     vector<vector<int>> AutonomousVehicleEnv::default_horizontal_edges() {
+        // horizontal_edges[y][x] is the edge from (x, y) to (x + 1, y)
+        // rows are from bottom y = 0 to top y = 3
         return {
-            {1, 2, 0},
-            {0, 2, 0},
-            {0, 2, 1},
-            {0, 0, 0}
+            {3, 3, 3, 3},  // y = 0: black / highway
+            {2, 2, 2, 2},  // y = 1: red / main road
+            {1, 1, 1, 1},  // y = 2: blue / street
+            {0, 0, 0, 0}   // y = 3: green / lane
         };
     }
+
 
     vector<vector<int>> AutonomousVehicleEnv::default_vertical_edges() {
+        // vertical_edges[y][x] is the edge from (x, y) to (x, y + 1)
+        // rows are from bottom interval y=0->1 up to y=2->3
         return {
-            {0, 1, 0, 0},
-            {0, 2, 2, 0},
-            {0, 0, 1, 0}
+            {0, 3, 3, 3, 3},  // between y = 0 and y = 1
+            {0, 1, 1, 1, 2},  // between y = 1 and y = 2
+            {0, 1, 1, 1, 1}   // between y = 2 and y = 3
         };
     }
 
-    vector<array<double, AutonomousVehicleEnv::num_reward_outcomes>> AutonomousVehicleEnv::default_edge_rewards() {
+    vector<array<double, AutonomousVehicleEnv::num_reward_outcomes>>AutonomousVehicleEnv::default_edge_rewards() {
         return {
-            array<double, num_reward_outcomes>{6.0, 8.0, 10.0},
-            array<double, num_reward_outcomes>{4.0, 12.0, 20.0},
-            array<double, num_reward_outcomes>{2.0, 18.0, 40.0}
+            array<double, num_reward_outcomes>{7.0, 7.0, 8.0},   // 0: lane / green
+            array<double, num_reward_outcomes>{4.0, 5.0, 11.0},  // 1: street / blue
+            array<double, num_reward_outcomes>{2.0, 4.0, 13.0},  // 2: main road / red
+            array<double, num_reward_outcomes>{1.0, 2.0, 18.0}   // 3: highway / black
         };
     }
 
     array<double, 2> AutonomousVehicleEnv::default_edge_probs() {
-        return {0.15, 0.85};
+        return {0.4, 0.7};
     }
 
     int AutonomousVehicleEnv::encode_time_outcome(int time, int outcome) const {

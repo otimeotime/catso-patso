@@ -134,9 +134,13 @@ namespace mcts {
             */
            double get_mean_return();
 
+           double get_cvar_return(double cvar_tau);
+
            /**
             * Returns the stddev of 'sampled_returns'
            */
           double get_stddev_return();
+
+          double get_stddev_cvar(double cvar_tau);
     };
 }

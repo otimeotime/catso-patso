@@ -1,5 +1,6 @@
 #include "mc_eval.h"
 
+#include <algorithm>
 #include <cmath>
 #include <thread>
 
@@ -160,6 +161,25 @@ namespace mcts {
         return mean;
     }
 
+    double MCEvaluator::get_cvar_return(double cvar_tau) {
+        if (sampled_returns.empty()) {
+            return 0.0;
+        }
+
+        vector<double> sorted_returns = sampled_returns;
+        sort(sorted_returns.begin(), sorted_returns.end());
+
+        const double tau_clamped = max(0.0, min(cvar_tau, 1.0));
+        const int tail_count = max(1, static_cast<int>(tau_clamped * sorted_returns.size()));
+
+        double mean = 0.0;
+        const double weight = 1.0 / tail_count;
+        for (int i = 0; i < tail_count; i++) {
+            mean += weight * sorted_returns[i];
+        }
+        return mean;
+    }
+
     /**
     * Returns the stddev of 'sampled_returns'
     */
@@ -169,6 +189,34 @@ namespace mcts {
         double variance = 0.0;
         for (double val : sampled_returns) {
             variance += weight * pow(val - mean, 2.0);
+        }
+        return sqrt(variance);
+    }
+
+    double MCEvaluator::get_stddev_cvar(double cvar_tau) {
+        if (sampled_returns.size() <= 1u) {
+            return 0.0;
+        }
+
+        vector<double> sorted_returns = sampled_returns;
+        sort(sorted_returns.begin(), sorted_returns.end());
+
+        const double tau_clamped = max(0.0, min(cvar_tau, 1.0));
+        const int tail_count = max(1, static_cast<int>(tau_clamped * sorted_returns.size()));
+        if (tail_count <= 1) {
+            return 0.0;
+        }
+
+        double mean = 0.0;
+        const double mean_weight = 1.0 / tail_count;
+        for (int i = 0; i < tail_count; i++) {
+            mean += mean_weight * sorted_returns[i];
+        }
+
+        double variance = 0.0;
+        const double variance_weight = 1.0 / (tail_count - 1.0);
+        for (int i = 0; i < tail_count; i++) {
+            variance += variance_weight * pow(sorted_returns[i] - mean, 2.0);
         }
         return sqrt(variance);
     }

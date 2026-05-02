@@ -20,7 +20,7 @@ using namespace mcts::exp::eval;
 
 int main(int argc, char** argv) {
     // Default horizon mirrors run_autonomous_vehicle.cpp's max_steps=8.
-    const CliArgs args = parse_args(argc, argv, /*default_horizon=*/8);
+    const CliArgs args = parse_args(argc, argv, /*default_horizon=*/32);
 
     auto env = make_shared<mcts::exp::AutonomousVehicleEnv>(
         mcts::exp::AutonomousVehicleEnv::default_horizontal_edges(),

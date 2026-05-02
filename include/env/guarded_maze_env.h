@@ -50,8 +50,8 @@ namespace mcts::exp {
                 std::array<int, 2> start = {6, 1},
                 std::array<int, 2> goal = {5, 6},
                 std::array<int, 2> guard = {6, 5},
-                int max_steps = 500,
-                int deduction_limit = 32,
+                int max_steps = 100,
+                int deduction_limit = 100,
                 double reward_normalisation = 256.0);
             virtual ~GuardedMazeEnv() = default;
 

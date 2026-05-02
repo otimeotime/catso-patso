@@ -11,21 +11,22 @@ int main(int argc, char** argv) {
     (void)argc;
     (void)argv;
 
-    constexpr int kMaxSteps = 500;
-    constexpr double kCvarTau = 0.05;
+    constexpr int kMaxSteps = 100;
+    constexpr double kCvarTau = 0.1;
     constexpr int kEvalRollouts = 200;
-    constexpr int kRuns = 10;
+    constexpr int kRuns = 3;
     constexpr int kThreads = 8;
     constexpr int kBaseSeed = 4242;
-    constexpr int kCatsoAtoms = 51;
+    constexpr int kCatsoAtoms = 100;
     constexpr double kOptimism = 1.0;
     constexpr double kPowerMeanExponent = 1.0;
-    constexpr int kPatsoParticles = 64;
+    constexpr int kPatsoParticles = 128;
 
-    vector<int> trial_counts;
-    for (int i = 1; i <= 60; ++i) {
-        trial_counts.push_back(i * 1000);
-    }
+    
+    vector<int> trial_counts = {50000, 60000, 70000, 80000, 100000};
+    // for (int i = 1; i <= 60; ++i) {
+    //     trial_counts.push_back(i * 1000);
+    // }
 
     auto env = make_shared<mcts::exp::GuardedMazeEnv>();
     const string extra_info =
