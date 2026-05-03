@@ -18,8 +18,8 @@ namespace mcts::exp {
 
             static constexpr int num_reward_outcomes = 3;
             static constexpr int initial_outcome_tag = 3;
-            static constexpr double default_goal_bonus = 80.0;
-            static constexpr double default_reward_normalisation = 256.0;
+            static constexpr double default_goal_bonus = 0.0;
+            static constexpr double default_reward_normalisation = 1.0;
 
         private:
             std::vector<std::vector<int>> horizontal_edges;
@@ -77,6 +77,10 @@ namespace mcts::exp {
                 std::shared_ptr<const mcts::Int3TupleState> state,
                 std::shared_ptr<const mcts::IntAction> action,
                 std::shared_ptr<const mcts::Int3TupleState> observation = nullptr) const;
+            bool counts_catastrophic_transition(
+                std::shared_ptr<const mcts::Int3TupleState> state,
+                std::shared_ptr<const mcts::IntAction> action,
+                std::shared_ptr<const mcts::Int3TupleState> observation) const;
 
             // Interface API
             virtual std::shared_ptr<const mcts::State> get_initial_state_itfc() const override;

@@ -56,13 +56,14 @@ struct CliArgs {
     double uct_epsilon = 0.1;
 
     // Eval settings
-    double cvar_tau = 0.05;
+    double cvar_tau = 0.1;
     int trial_budget = 10000;
     int num_seeds = 3;
     int base_seed = 4242;
     int eval_rollouts = 100;
     int threads = 8;
     int horizon = 0;              // env-specific; required.
+    bool debug_trajectories = false;
 };
 
 inline void usage(std::ostream& out, const std::string& binary_name) {
@@ -73,6 +74,7 @@ inline void usage(std::ostream& out, const std::string& binary_name) {
            "  Hyperparams (UCT)  : --uct-bias FLOAT (-1=auto) --uct-epsilon FLOAT\n"
            "  Eval               : --cvar-tau FLOAT --trial-budget INT --num-seeds INT\n"
            "                       --base-seed INT --eval-rollouts INT --threads INT --horizon INT\n"
+           "                       [--debug-trajectories]\n"
            "Output: ONE JSON line on stdout with averaged metrics.\n";
 }
 
@@ -91,6 +93,10 @@ inline CliArgs parse_args(int argc, char** argv, int default_horizon) {
     for (int i = 1; i < argc; ++i) {
         std::string flag = argv[i];
         if (flag == "--help" || flag == "-h") { usage(std::cout, binary_name); std::exit(0); }
+        if (flag == "--debug-trajectories") {
+            args.debug_trajectories = true;
+            continue;
+        }
         if (i + 1 >= argc) {
             std::cerr << "missing value for flag " << flag << "\n";
             usage(std::cerr, binary_name);
@@ -279,8 +285,72 @@ inline MgrAndRoot build_planner(
 
 // -------------------------------------------------------- evaluate_tree (MC)
 //
-// CatastropheFn signature: bool fn(std::shared_ptr<const mcts::State>).
-// Each env binary supplies a lambda matching its catastrophe predicate.
+// CatastropheFn may be either:
+//   bool fn(std::shared_ptr<const mcts::State>)
+//   bool fn(std::shared_ptr<const mcts::State>,
+//           std::shared_ptr<const mcts::Action>,
+//           std::shared_ptr<const mcts::State>)
+// Each env binary supplies the form needed for its catastrophic-count metric.
+
+template <typename CatastropheFn>
+requires requires (const CatastropheFn& fn, std::shared_ptr<const mcts::State> s) {
+    fn(s);
+}
+bool catastrophe_from_initial_state(
+    const CatastropheFn& catastrophe_fn,
+    std::shared_ptr<const mcts::State> state)
+{
+    return catastrophe_fn(state);
+}
+
+template <typename CatastropheFn>
+requires (!requires (const CatastropheFn& fn, std::shared_ptr<const mcts::State> s) {
+    fn(s);
+})
+bool catastrophe_from_initial_state(
+    const CatastropheFn& catastrophe_fn,
+    std::shared_ptr<const mcts::State> state)
+{
+    (void)catastrophe_fn;
+    (void)state;
+    return false;
+}
+
+template <typename CatastropheFn>
+requires requires (
+    const CatastropheFn& fn,
+    std::shared_ptr<const mcts::State> s,
+    std::shared_ptr<const mcts::Action> a,
+    std::shared_ptr<const mcts::State> ns) {
+    fn(s, a, ns);
+}
+bool catastrophe_from_transition(
+    const CatastropheFn& catastrophe_fn,
+    std::shared_ptr<const mcts::State> state,
+    std::shared_ptr<const mcts::Action> action,
+    std::shared_ptr<const mcts::State> next_state)
+{
+    return catastrophe_fn(state, action, next_state);
+}
+
+template <typename CatastropheFn>
+requires (!requires (
+    const CatastropheFn& fn,
+    std::shared_ptr<const mcts::State> s,
+    std::shared_ptr<const mcts::Action> a,
+    std::shared_ptr<const mcts::State> ns) {
+    fn(s, a, ns);
+})
+bool catastrophe_from_transition(
+    const CatastropheFn& catastrophe_fn,
+    std::shared_ptr<const mcts::State> state,
+    std::shared_ptr<const mcts::Action> action,
+    std::shared_ptr<const mcts::State> next_state)
+{
+    (void)state;
+    (void)action;
+    return catastrophe_fn(next_state);
+}
 
 template <typename EnvT, typename CatastropheFn>
 PerSeedMetrics evaluate_tree(
@@ -290,7 +360,9 @@ PerSeedMetrics evaluate_tree(
     int eval_rollouts,
     int seed,
     double cvar_tau,
-    CatastropheFn catastrophe_fn)
+    CatastropheFn catastrophe_fn,
+    bool debug_trajectories = false,
+    const std::string& debug_trajectory_label = "")
 {
     PerSeedMetrics m;
     mcts::RandManager eval_rng(seed);
@@ -298,26 +370,37 @@ PerSeedMetrics evaluate_tree(
     std::vector<double> sampled_returns;
     sampled_returns.reserve(static_cast<size_t>(eval_rollouts));
     int catastrophic_count = 0;
+    const bool should_debug_trajectories =
+        debug_trajectories || mcts::should_debug_mc_eval_trajectories_from_env();
+    const std::string trajectory_label = debug_trajectory_label.empty() ? "MC" : debug_trajectory_label;
 
     for (int rollout = 0; rollout < eval_rollouts; ++rollout) {
         policy.reset();
         int steps = 0;
         double sample_return = 0.0;
         std::shared_ptr<const mcts::State> state = env->get_initial_state_itfc();
-        bool was_catastrophic = catastrophe_fn(state);
+        bool was_catastrophic = catastrophe_from_initial_state(catastrophe_fn, state);
         auto context_ptr = env->sample_context_itfc(state);
         mcts::MctsEnvContext& context = *context_ptr;
+        mcts::RolloutTrajectoryTrace trajectory_trace(should_debug_trajectories, trajectory_label);
+        trajectory_trace.append_state(state);
 
         while (steps < horizon && !env->is_sink_state_itfc(state)) {
             auto action = policy.get_action(state, context);
             auto next_state = env->sample_transition_distribution_itfc(state, action, eval_rng);
             auto observation = env->sample_observation_distribution_itfc(action, next_state, eval_rng);
-            sample_return += env->get_reward_itfc(state, action, observation);
-            if (catastrophe_fn(next_state)) was_catastrophic = true;
+            const double reward = env->get_reward_itfc(state, action, observation);
+            sample_return += reward;
+            trajectory_trace.append_reward(reward);
+            trajectory_trace.append_state(next_state);
+            if (catastrophe_from_transition(catastrophe_fn, state, action, next_state)) {
+                was_catastrophic = true;
+            }
             policy.update_step(action, observation);
             state = next_state;
             ++steps;
         }
+        trajectory_trace.print(std::cerr);
         sampled_returns.push_back(sample_return);
         if (was_catastrophic) ++catastrophic_count;
     }

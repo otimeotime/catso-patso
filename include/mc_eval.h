@@ -7,13 +7,42 @@
 #include "mcts_manager.h"
 #include "mcts_types.h"
 
+#include <iosfwd>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <vector>
 
 namespace mcts {
     // Forward declare
     class MCEvaluator;
+
+    /**
+     * Returns true when MC-eval trajectory logging is enabled via environment.
+     *
+     * Any value other than "", "0", "false", "no", or "off" enables logging.
+     */
+    bool should_debug_mc_eval_trajectories_from_env();
+
+    /**
+     * Helper for building a debug line of the form:
+     *   LABEL: [state_0, reward_0, state_1, reward_1, ...]
+     */
+    class RolloutTrajectoryTrace {
+        protected:
+            bool enabled;
+            std::string label;
+            std::vector<std::string> entries;
+
+        public:
+            RolloutTrajectoryTrace(bool enabled, std::string label);
+
+            void append_state(std::shared_ptr<const State> state);
+
+            void append_reward(double reward);
+
+            void print(std::ostream& os) const;
+    };
 
     /**
      * Converts a Mcts tree into a complete policy that can be used for evaluation.
@@ -99,6 +128,8 @@ namespace mcts {
             int max_trial_length;
             std::vector<double> sampled_returns;
             RandManager& rand_manager;
+            bool debug_trajectory_logging;
+            std::string debug_trajectory_label;
             std::mutex lock;
 
             /**
@@ -119,7 +150,9 @@ namespace mcts {
                 std::shared_ptr<const MctsEnv> mcts_env,
                 EvalPolicy& eval_policy,
                 int max_trial_length,
-                RandManager& rand_manager);
+                RandManager& rand_manager,
+                bool debug_trajectory_logging=false,
+                std::string debug_trajectory_label="");
 
             /**
              * Run 'num_rollout' many rollouts to gather stats. Does so by spawning 'num_threads' many threads and 

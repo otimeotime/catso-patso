@@ -285,7 +285,9 @@ namespace {
         int rollouts,
         int threads,
         int seed,
-        double cvar_tau)
+        double cvar_tau,
+        bool debug_trajectories = false,
+        const string& debug_trajectory_label = "")
     {
         (void)threads;
 
@@ -294,6 +296,9 @@ namespace {
         vector<double> sampled_returns;
         sampled_returns.reserve(static_cast<size_t>(max(rollouts, 0)));
         int catastrophic_count = 0;
+        const bool should_debug_trajectories =
+            debug_trajectories || mcts::should_debug_mc_eval_trajectories_from_env();
+        const string trajectory_label = debug_trajectory_label.empty() ? "MC" : debug_trajectory_label;
 
         for (int rollout = 0; rollout < rollouts; ++rollout) {
             policy.reset();
@@ -301,9 +306,11 @@ namespace {
             int num_actions_taken = 0;
             double sample_return = 0.0;
             shared_ptr<const mcts::State> state = env->get_initial_state_itfc();
-            bool rollout_was_catastrophic = env->is_catastrophic_state_itfc(state);
+            bool rollout_was_catastrophic = false;
             auto context_ptr = env->sample_context_itfc(state);
             mcts::MctsEnvContext& context = *context_ptr;
+            mcts::RolloutTrajectoryTrace trajectory_trace(should_debug_trajectories, trajectory_label);
+            trajectory_trace.append_state(state);
 
             while (num_actions_taken < horizon && !env->is_sink_state_itfc(state)) {
                 shared_ptr<const mcts::Action> action = policy.get_action(state, context);
@@ -312,8 +319,14 @@ namespace {
                 shared_ptr<const mcts::Observation> observation =
                     env->sample_observation_distribution_itfc(action, next_state, eval_rng);
 
-                sample_return += env->get_reward_itfc(state, action, observation);
-                if (env->is_catastrophic_state_itfc(next_state)) {
+                const double reward = env->get_reward_itfc(state, action, observation);
+                sample_return += reward;
+                trajectory_trace.append_reward(reward);
+                trajectory_trace.append_state(next_state);
+                if (env->counts_catastrophic_transition(
+                        static_pointer_cast<const mcts::Int3TupleState>(state),
+                        static_pointer_cast<const mcts::IntAction>(action),
+                        static_pointer_cast<const mcts::Int3TupleState>(next_state))) {
                     rollout_was_catastrophic = true;
                 }
                 policy.update_step(action, observation);
@@ -321,6 +334,7 @@ namespace {
                 num_actions_taken++;
             }
 
+            trajectory_trace.print(cerr);
             sampled_returns.push_back(sample_return);
             if (rollout_was_catastrophic) {
                 catastrophic_count++;
@@ -504,6 +518,7 @@ int main(int argc, char** argv) {
     const int runs = 10;
     const int threads = 8;
     const int base_seed = 4242;
+    const bool debug_eval_trajectories = mcts::should_debug_mc_eval_trajectories_from_env();
     const int progress_batch_trials = min(total_trials, 5000);
 
     auto env = make_shared<mcts::exp::AutonomousVehicleEnv>(
@@ -565,7 +580,16 @@ int main(int argc, char** argv) {
                 pool->run_trials(total_trials, numeric_limits<double>::max(), true);
             }
 
-            auto stats = evaluate_tree(env, root, horizon, eval_rollouts, threads, seed + 777, cand.eval_tau);
+            auto stats = evaluate_tree(
+                env,
+                root,
+                horizon,
+                eval_rollouts,
+                threads,
+                seed + 777,
+                cand.eval_tau,
+                debug_eval_trajectories,
+                cand.algo);
             const auto& root_solution = oracle_by_tau.at(cand.eval_tau).solve_state(env->get_initial_state());
             auto metrics = evaluate_autonomous_vehicle_metrics(
                 env,

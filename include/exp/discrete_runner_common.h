@@ -24,7 +24,6 @@
 #include <map>
 #include <memory>
 #include <string>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -85,6 +84,66 @@ namespace mcts::exp::runner {
         double sum_cvar_return = 0.0;
         double sum_cvar_stddev = 0.0;
     };
+
+    template <typename CatastropheFn>
+    requires requires (const CatastropheFn& fn, std::shared_ptr<const mcts::State> s) {
+        fn(s);
+    }
+    bool catastrophe_from_initial_state(
+        const CatastropheFn& catastrophe_fn,
+        std::shared_ptr<const mcts::State> state)
+    {
+        return catastrophe_fn(state);
+    }
+
+    template <typename CatastropheFn>
+    requires (!requires (const CatastropheFn& fn, std::shared_ptr<const mcts::State> s) {
+        fn(s);
+    })
+    bool catastrophe_from_initial_state(
+        const CatastropheFn& catastrophe_fn,
+        std::shared_ptr<const mcts::State> state)
+    {
+        (void)catastrophe_fn;
+        (void)state;
+        return false;
+    }
+
+    template <typename CatastropheFn>
+    requires requires (
+        const CatastropheFn& fn,
+        std::shared_ptr<const mcts::State> s,
+        std::shared_ptr<const mcts::Action> a,
+        std::shared_ptr<const mcts::State> ns) {
+        fn(s, a, ns);
+    }
+    bool catastrophe_from_transition(
+        const CatastropheFn& catastrophe_fn,
+        std::shared_ptr<const mcts::State> state,
+        std::shared_ptr<const mcts::Action> action,
+        std::shared_ptr<const mcts::State> next_state)
+    {
+        return catastrophe_fn(state, action, next_state);
+    }
+
+    template <typename CatastropheFn>
+    requires (!requires (
+        const CatastropheFn& fn,
+        std::shared_ptr<const mcts::State> s,
+        std::shared_ptr<const mcts::Action> a,
+        std::shared_ptr<const mcts::State> ns) {
+        fn(s, a, ns);
+    })
+    bool catastrophe_from_transition(
+        const CatastropheFn& catastrophe_fn,
+        std::shared_ptr<const mcts::State> state,
+        std::shared_ptr<const mcts::Action> action,
+        std::shared_ptr<const mcts::State> next_state)
+    {
+        (void)state;
+        (void)action;
+        return catastrophe_fn(next_state);
+    }
 
     inline double compute_lower_tail_cvar(const ReturnDistribution& distribution, double tau) {
         if (distribution.empty()) {
@@ -244,7 +303,9 @@ namespace mcts::exp::runner {
         int threads,
         int seed,
         double cvar_tau,
-        CatastropheFn catastrophe_fn)
+        CatastropheFn catastrophe_fn,
+        bool debug_trajectories = false,
+        const std::string& debug_trajectory_label = "")
     {
         (void)threads;
 
@@ -253,6 +314,9 @@ namespace mcts::exp::runner {
         std::vector<double> sampled_returns;
         sampled_returns.reserve(static_cast<size_t>(std::max(rollouts, 0)));
         int catastrophic_count = 0;
+        const bool should_debug_trajectories =
+            debug_trajectories || mcts::should_debug_mc_eval_trajectories_from_env();
+        const std::string trajectory_label = debug_trajectory_label.empty() ? "MC" : debug_trajectory_label;
 
         for (int rollout = 0; rollout < rollouts; ++rollout) {
             policy.reset();
@@ -260,9 +324,11 @@ namespace mcts::exp::runner {
             int num_actions_taken = 0;
             double sample_return = 0.0;
             std::shared_ptr<const mcts::State> state = env->get_initial_state_itfc();
-            bool rollout_was_catastrophic = catastrophe_fn(state);
+            bool rollout_was_catastrophic = catastrophe_from_initial_state(catastrophe_fn, state);
             auto context_ptr = env->sample_context_itfc(state);
             mcts::MctsEnvContext& context = *context_ptr;
+            mcts::RolloutTrajectoryTrace trajectory_trace(should_debug_trajectories, trajectory_label);
+            trajectory_trace.append_state(state);
 
             while (num_actions_taken < horizon && !env->is_sink_state_itfc(state)) {
                 std::shared_ptr<const mcts::Action> action = policy.get_action(state, context);
@@ -271,8 +337,11 @@ namespace mcts::exp::runner {
                 std::shared_ptr<const mcts::Observation> observation =
                     env->sample_observation_distribution_itfc(action, next_state, eval_rng);
 
-                sample_return += env->get_reward_itfc(state, action, observation);
-                if (catastrophe_fn(next_state)) {
+                const double reward = env->get_reward_itfc(state, action, observation);
+                sample_return += reward;
+                trajectory_trace.append_reward(reward);
+                trajectory_trace.append_state(next_state);
+                if (catastrophe_from_transition(catastrophe_fn, state, action, next_state)) {
                     rollout_was_catastrophic = true;
                 }
                 policy.update_step(action, observation);
@@ -280,6 +349,7 @@ namespace mcts::exp::runner {
                 num_actions_taken++;
             }
 
+            trajectory_trace.print(std::cerr);
             sampled_returns.push_back(sample_return);
             if (rollout_was_catastrophic) {
                 catastrophic_count++;
@@ -437,11 +507,19 @@ namespace mcts::exp::runner {
         int rollouts,
         int threads,
         int seed,
-        double cvar_tau)
+        double cvar_tau,
+        bool debug_trajectories = false,
+        const std::string& debug_trajectory_label = "")
     {
         mcts::RandManager eval_rng(seed);
         mcts::EvalPolicy policy(root, env, eval_rng);
-        mcts::MCEvaluator evaluator(env, policy, horizon, eval_rng);
+        mcts::MCEvaluator evaluator(
+            env,
+            policy,
+            horizon,
+            eval_rng,
+            debug_trajectories,
+            debug_trajectory_label);
         evaluator.run_rollouts(rollouts, threads);
         return {evaluator.get_cvar_return(cvar_tau), evaluator.get_stddev_cvar(cvar_tau)};
     }
@@ -498,6 +576,7 @@ namespace mcts::exp::runner {
                   << ", Trial counts: " << trial_counts.size()
                   << "\n";
         std::cout << "  Root optimal CVaR: " << root_solution.optimal_cvar << "\n";
+        const bool debug_eval_trajectories = mcts::should_debug_mc_eval_trajectories_from_env();
 
         for (const auto& cand : candidates) {
             bool printed_config = false;
@@ -543,7 +622,9 @@ namespace mcts::exp::runner {
                             threads,
                             seed + 777,
                             cvar_tau,
-                            catastrophe_fn);
+                            catastrophe_fn,
+                            debug_eval_trajectories,
+                            cand.algo);
                     const auto metrics = evaluate_root_metrics(const_env, root, root_solution);
                     out << env_id << "," << cand.algo << "," << run
                         << "," << target_trials << "," << stats.mean << "," << stats.stddev
@@ -639,6 +720,7 @@ namespace mcts::exp::runner {
                   << ", Runs: " << runs
                   << ", Trial counts: " << trial_counts.size()
                   << "\n";
+        const bool debug_eval_trajectories = mcts::should_debug_mc_eval_trajectories_from_env();
 
         for (const auto& cand : candidates) {
             bool printed_config = false;
@@ -682,7 +764,9 @@ namespace mcts::exp::runner {
                         eval_rollouts,
                         threads,
                         seed + 777,
-                        cvar_tau);
+                        cvar_tau,
+                        debug_eval_trajectories,
+                        cand.algo);
                     out << env_id << "," << cand.algo << "," << run
                         << "," << target_trials
                         << "," << stats.cvar_return

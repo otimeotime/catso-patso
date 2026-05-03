@@ -1,10 +1,78 @@
 #include "mc_eval.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <cstdlib>
+#include <iostream>
+#include <sstream>
 #include <thread>
 
 using namespace std;
+
+namespace {
+    bool parse_debug_flag(const char* value) {
+        if (value == nullptr) {
+            return false;
+        }
+
+        string normalized(value);
+        transform(
+            normalized.begin(),
+            normalized.end(),
+            normalized.begin(),
+            [](unsigned char ch) { return static_cast<char>(tolower(ch)); });
+        return !normalized.empty()
+            && normalized != "0"
+            && normalized != "false"
+            && normalized != "no"
+            && normalized != "off";
+    }
+}
+
+namespace mcts {
+    bool should_debug_mc_eval_trajectories_from_env() {
+        return parse_debug_flag(getenv("MCTS_DEBUG_MC_TRAJECTORIES"));
+    }
+
+    RolloutTrajectoryTrace::RolloutTrajectoryTrace(bool enabled, string label) :
+            enabled(enabled),
+            label(label.empty() ? "MC" : move(label)),
+            entries()
+    {
+    }
+
+    void RolloutTrajectoryTrace::append_state(shared_ptr<const State> state) {
+        if (!enabled) {
+            return;
+        }
+        entries.push_back(state == nullptr ? "<null>" : state->get_pretty_print_string());
+    }
+
+    void RolloutTrajectoryTrace::append_reward(double reward) {
+        if (!enabled) {
+            return;
+        }
+        stringstream ss;
+        ss << reward;
+        entries.push_back(ss.str());
+    }
+
+    void RolloutTrajectoryTrace::print(ostream& os) const {
+        if (!enabled) {
+            return;
+        }
+
+        os << label << ": [";
+        for (size_t i = 0; i < entries.size(); ++i) {
+            if (i > 0) {
+                os << ", ";
+            }
+            os << entries[i];
+        }
+        os << "]\n";
+    }
+}
 
 /**
  * Eval policy implementation
@@ -70,12 +138,16 @@ namespace mcts {
         shared_ptr<const MctsEnv> mcts_env, 
         EvalPolicy& policy, 
         int max_trial_length, 
-        RandManager& rand_manager) :
+        RandManager& rand_manager,
+        bool debug_trajectory_logging,
+        string debug_trajectory_label) :
             mcts_env(mcts_env), 
             policy(policy), 
             max_trial_length(max_trial_length), 
             sampled_returns(), 
-            rand_manager(rand_manager) {}
+            rand_manager(rand_manager),
+            debug_trajectory_logging(debug_trajectory_logging || should_debug_mc_eval_trajectories_from_env()),
+            debug_trajectory_label(debug_trajectory_label.empty() ? "MC" : move(debug_trajectory_label)) {}
 
     /**
      * Runs a single rollout and stores the result in 'sampled_returns'.
@@ -90,6 +162,8 @@ namespace mcts {
         shared_ptr<const State> state = mcts_env->get_initial_state_itfc();
         auto context_ptr = mcts_env->sample_context_itfc(state);
         MctsEnvContext& context = *context_ptr;
+        RolloutTrajectoryTrace trajectory_trace(debug_trajectory_logging, debug_trajectory_label);
+        trajectory_trace.append_state(state);
 
         // Run trial
         while (num_actions_taken < max_trial_length && !mcts_env->is_sink_state_itfc(state)) {
@@ -98,8 +172,11 @@ namespace mcts {
                 state, action, rand_manager);
             shared_ptr<const Observation> obsv = mcts_env->sample_observation_distribution_itfc(
                 action, next_state, rand_manager);
-            
-            sample_return += mcts_env->get_reward_itfc(state, action, obsv);
+            const double reward = mcts_env->get_reward_itfc(state, action, obsv);
+
+            sample_return += reward;
+            trajectory_trace.append_reward(reward);
+            trajectory_trace.append_state(next_state);
 
             thread_policy.update_step(action, obsv);
             state = next_state;
@@ -109,6 +186,7 @@ namespace mcts {
         // store
         lock_guard lg(lock);
         sampled_returns.push_back(sample_return);
+        trajectory_trace.print(cerr);
     }
     
     /**

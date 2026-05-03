@@ -63,7 +63,14 @@ int main(int argc, char** argv) {
 
         PerSeedMetrics m = evaluate_tree(
             static_pointer_cast<const mcts::exp::LunarLanderEnv>(env),
-            root, args.horizon, args.eval_rollouts, seed + 777, args.cvar_tau, catastrophe_fn);
+            root,
+            args.horizon,
+            args.eval_rollouts,
+            seed + 777,
+            args.cvar_tau,
+            catastrophe_fn,
+            args.debug_trajectories,
+            args.algo);
         evaluate_root_recommendation(
             static_pointer_cast<const mcts::exp::LunarLanderEnv>(env),
             root, root_solution, m);

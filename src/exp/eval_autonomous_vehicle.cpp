@@ -47,9 +47,16 @@ int main(int argc, char** argv) {
     auto init_state = env->get_initial_state_itfc();
     AggregatedMetrics agg;
 
-    // Catastrophe predicate matches the env's own override.
-    const auto catastrophe_fn = [env_ptr = env](shared_ptr<const mcts::State> s) {
-        return env_ptr->is_catastrophic_state_itfc(s);
+    // Count only large-cost outcomes on the max large-cost road type
+    // (highway in the default map).
+    const auto catastrophe_fn = [env_ptr = env](
+        shared_ptr<const mcts::State> state,
+        shared_ptr<const mcts::Action> action,
+        shared_ptr<const mcts::State> next_state) {
+        return env_ptr->counts_catastrophic_transition(
+            static_pointer_cast<const mcts::Int3TupleState>(state),
+            static_pointer_cast<const mcts::IntAction>(action),
+            static_pointer_cast<const mcts::Int3TupleState>(next_state));
     };
 
     for (int s = 0; s < args.num_seeds; ++s) {
@@ -64,7 +71,14 @@ int main(int argc, char** argv) {
 
         PerSeedMetrics m = evaluate_tree(
             static_pointer_cast<const mcts::exp::AutonomousVehicleEnv>(env),
-            root, args.horizon, args.eval_rollouts, seed + 777, args.cvar_tau, catastrophe_fn);
+            root,
+            args.horizon,
+            args.eval_rollouts,
+            seed + 777,
+            args.cvar_tau,
+            catastrophe_fn,
+            args.debug_trajectories,
+            args.algo);
         evaluate_root_recommendation(
             static_pointer_cast<const mcts::exp::AutonomousVehicleEnv>(env),
             root, root_solution, m);

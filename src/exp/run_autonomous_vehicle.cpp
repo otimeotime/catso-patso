@@ -11,10 +11,10 @@ int main(int argc, char** argv) {
     (void)argc;
     (void)argv;
 
-    constexpr int kMaxSteps = 32;
-    constexpr double kCvarTau = 0.05;
+    constexpr int kMaxSteps = 7;
+    constexpr double kCvarTau = 0.1;
     constexpr int kEvalRollouts = 50;
-    constexpr int kRuns = 1;
+    constexpr int kRuns = 3;
     constexpr int kThreads = 8;
     constexpr int kBaseSeed = 4242;
     constexpr int kCatsoAtoms = 100;
@@ -41,8 +41,14 @@ int main(int argc, char** argv) {
         reward_normalisation);
     const string extra_info =
         "edge_probs=[" + to_string(edge_probs[0]) + "," + to_string(edge_probs[1]) + "], max_steps=32";
-    const auto catastrophe_fn = [env_ptr = env](shared_ptr<const mcts::State> state) {
-        return env_ptr->is_catastrophic_state_itfc(state);
+    const auto catastrophe_fn = [env_ptr = env](
+        shared_ptr<const mcts::State> state,
+        shared_ptr<const mcts::Action> action,
+        shared_ptr<const mcts::State> next_state) {
+        return env_ptr->counts_catastrophic_transition(
+            static_pointer_cast<const mcts::Int3TupleState>(state),
+            static_pointer_cast<const mcts::IntAction>(action),
+            static_pointer_cast<const mcts::Int3TupleState>(next_state));
     };
 
     return mcts::exp::runner::run_experiment<

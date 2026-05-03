@@ -319,6 +319,8 @@ $(EVAL_GUARDED_MAZE_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 
 # Build lunar lander eval object files rule
 $(EVAL_LUNAR_LANDER_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # Build autonomous vehicle tuner object files rule
 $(TUNE_AUTONOMOUS_VEHICLE_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
@@ -488,6 +490,7 @@ $(TARGET_MCTS_EVAL_GUARDED_MAZE): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(EVAL_GUARDE
 
 # Build Lunar Lander single-config evaluator
 $(TARGET_MCTS_EVAL_LUNAR_LANDER): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(EVAL_LUNAR_LANDER_OBJECTS)
+	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
 
 # Build Autonomous Vehicle tuner
 $(TARGET_MCTS_TUNE_AUTONOMOUS_VEHICLE): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(TUNE_AUTONOMOUS_VEHICLE_OBJECTS)

@@ -104,15 +104,15 @@ namespace mcts::exp {
 
     vector<array<double, AutonomousVehicleEnv::num_reward_outcomes>>AutonomousVehicleEnv::default_edge_rewards() {
         return {
-            array<double, num_reward_outcomes>{7.0, 7.0, 8.0},   // 0: lane / green
-            array<double, num_reward_outcomes>{4.0, 5.0, 11.0},  // 1: street / blue
-            array<double, num_reward_outcomes>{2.0, 4.0, 13.0},  // 2: main road / red
-            array<double, num_reward_outcomes>{1.0, 2.0, 18.0}   // 3: highway / black
+            array<double, num_reward_outcomes>{4.0, 4.0, 4.0},   // 0: lane / green
+            array<double, num_reward_outcomes>{2.0, 3.0, 5.0},  // 1: street / blue
+            array<double, num_reward_outcomes>{3.0, 4.0, 7.0},  // 2: main road / red
+            array<double, num_reward_outcomes>{1.0, 2.0, 10.0}   // 3: highway / black
         };
     }
 
     array<double, 2> AutonomousVehicleEnv::default_edge_probs() {
-        return {0.4, 0.7};
+        return {0.4, 0.5};
     }
 
     int AutonomousVehicleEnv::encode_time_outcome(int time, int outcome) const {
@@ -348,6 +348,45 @@ namespace mcts::exp {
         return p0 * reward_for_transition(edge_type, 0, reached_goal)
             + p1 * reward_for_transition(edge_type, 1, reached_goal)
             + p2 * reward_for_transition(edge_type, 2, reached_goal);
+    }
+
+    bool AutonomousVehicleEnv::counts_catastrophic_transition(
+        shared_ptr<const mcts::Int3TupleState> state,
+        shared_ptr<const mcts::IntAction> action,
+        shared_ptr<const mcts::Int3TupleState> observation) const
+    {
+        if (state == nullptr || action == nullptr || observation == nullptr || is_sink_state(state)) {
+            return false;
+        }
+
+        int observed_x = 0;
+        int observed_y = 0;
+        int observed_time = 0;
+        int observed_outcome = 0;
+        decode_state(observation, observed_x, observed_y, observed_time, observed_outcome);
+        (void)observed_x;
+        (void)observed_y;
+        (void)observed_time;
+        if (observed_outcome != num_reward_outcomes - 1) {
+            return false;
+        }
+
+        int x = 0;
+        int y = 0;
+        int time = 0;
+        int last_outcome = 0;
+        decode_state(state, x, y, time, last_outcome);
+        (void)time;
+        (void)last_outcome;
+
+        const int edge_type = get_edge_type(x, y, action->action);
+        double max_large_cost = edge_rewards.front()[num_reward_outcomes - 1];
+        for (const auto& rewards : edge_rewards) {
+            max_large_cost = max(max_large_cost, rewards[num_reward_outcomes - 1]);
+        }
+
+        const double edge_large_cost = edge_rewards[edge_type][num_reward_outcomes - 1];
+        return edge_large_cost + 1e-12 >= max_large_cost;
     }
 
     shared_ptr<const mcts::State> AutonomousVehicleEnv::get_initial_state_itfc() const {

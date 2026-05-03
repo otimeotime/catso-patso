@@ -63,6 +63,7 @@ namespace {
         int eval_rollouts = 100;
         int threads = 8;
         int horizon = 6;  // mirrors max_sequence_length default
+        bool debug_trajectories = false;
     };
 
     static void usage(ostream& out) {
@@ -72,6 +73,7 @@ namespace {
                "  Hyperparams (UCT)  : --uct-bias FLOAT (or -1 for auto) --uct-epsilon FLOAT\n"
                "  Eval               : --cvar-tau FLOAT --trial-budget INT --num-seeds INT\n"
                "                       --base-seed INT --eval-rollouts INT --threads INT --horizon INT\n"
+               "                       [--debug-trajectories]\n"
                "Output: ONE JSON line on stdout with averaged metrics.\n";
     }
 
@@ -89,6 +91,10 @@ namespace {
             if (flag == "--help" || flag == "-h") {
                 usage(cout);
                 exit(0);
+            }
+            if (flag == "--debug-trajectories") {
+                args.debug_trajectories = true;
+                continue;
             }
             if (i + 1 >= argc) {
                 cerr << "missing value for flag " << flag << "\n";
@@ -274,7 +280,9 @@ namespace {
         int horizon,
         int eval_rollouts,
         int seed,
-        double cvar_tau)
+        double cvar_tau,
+        bool debug_trajectories,
+        const string& debug_trajectory_label)
     {
         PerSeedMetrics m;
         mcts::RandManager eval_rng(seed);
@@ -282,6 +290,9 @@ namespace {
         vector<double> sampled_returns;
         sampled_returns.reserve(static_cast<size_t>(eval_rollouts));
         int catastrophic_count = 0;
+        const bool should_debug_trajectories =
+            debug_trajectories || mcts::should_debug_mc_eval_trajectories_from_env();
+        const string trajectory_label = debug_trajectory_label.empty() ? "MC" : debug_trajectory_label;
 
         for (int rollout = 0; rollout < eval_rollouts; ++rollout) {
             policy.reset();
@@ -291,17 +302,23 @@ namespace {
             bool was_catastrophic = env->is_catastrophic_state_itfc(state);
             auto context_ptr = env->sample_context_itfc(state);
             mcts::MctsEnvContext& context = *context_ptr;
+            mcts::RolloutTrajectoryTrace trajectory_trace(should_debug_trajectories, trajectory_label);
+            trajectory_trace.append_state(state);
 
             while (steps < horizon && !env->is_sink_state_itfc(state)) {
                 auto action = policy.get_action(state, context);
                 auto next_state = env->sample_transition_distribution_itfc(state, action, eval_rng);
                 auto observation = env->sample_observation_distribution_itfc(action, next_state, eval_rng);
-                sample_return += env->get_reward_itfc(state, action, observation);
+                const double reward = env->get_reward_itfc(state, action, observation);
+                sample_return += reward;
+                trajectory_trace.append_reward(reward);
+                trajectory_trace.append_state(next_state);
                 if (env->is_catastrophic_state_itfc(next_state)) was_catastrophic = true;
                 policy.update_step(action, observation);
                 state = next_state;
                 ++steps;
             }
+            trajectory_trace.print(cerr);
             sampled_returns.push_back(sample_return);
             if (was_catastrophic) ++catastrophic_count;
         }
@@ -481,7 +498,14 @@ int main(int argc, char** argv) {
         pool->run_trials(args.trial_budget, numeric_limits<double>::max(), true);
 
         PerSeedMetrics m = evaluate_tree(
-            env, root, args.horizon, args.eval_rollouts, seed + 777, args.cvar_tau);
+            env,
+            root,
+            args.horizon,
+            args.eval_rollouts,
+            seed + 777,
+            args.cvar_tau,
+            args.debug_trajectories,
+            args.algo);
         evaluate_root_recommendation(env, root, root_solution, m);
         m.wall_time_sec =
             chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now() - t0).count();

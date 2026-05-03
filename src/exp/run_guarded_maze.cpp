@@ -11,7 +11,7 @@ int main(int argc, char** argv) {
     (void)argc;
     (void)argv;
 
-    constexpr int kMaxSteps = 100;
+    constexpr int kMaxSteps = 10;
     constexpr double kCvarTau = 0.1;
     constexpr int kEvalRollouts = 200;
     constexpr int kRuns = 3;
@@ -23,7 +23,7 @@ int main(int argc, char** argv) {
     constexpr int kPatsoParticles = 128;
 
     
-    vector<int> trial_counts = {50000, 60000, 70000, 80000, 100000};
+    vector<int> trial_counts = {10000, 20000, 30000, 40000, 50000};
     // for (int i = 1; i <= 60; ++i) {
     //     trial_counts.push_back(i * 1000);
     // }
