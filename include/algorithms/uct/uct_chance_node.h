@@ -2,6 +2,7 @@
 
 #include "algorithms/uct/uct_decision_node.h"
 #include "algorithms/uct/uct_manager.h"
+#include "algorithms/common/empirical_cvar.h"
 #include "mcts_chance_node.h"
 #include "mcts_decision_node.h"
 #include "mcts_env_context.h"
@@ -38,6 +39,8 @@ namespace mcts {
             int num_backups;
             double avg_return;
             std::shared_ptr<StateDistr> next_state_distr;
+            bool track_empirical_cvar;
+            std::vector<double> empirical_return_samples;
 
             /**
              * Handles the Mcts sample_observation function by randomly sampling.
@@ -154,6 +157,7 @@ namespace mcts {
              */
             virtual ~UctCNode() = default;
             double get_mean_value() const { return avg_return; }
+            double get_cvar_value_at(double alpha) const;
 
             /**
              * Creates a child node, handles the internal management of the creation and returns a pointer to it.

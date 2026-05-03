@@ -137,6 +137,10 @@ namespace mcts::exp {
         return is_goal_cell(row, col) || steps >= max_steps;
     }
 
+    bool GuardedMazeEnv::is_catastrophic_state(shared_ptr<const mcts::Int4TupleState> state) const {
+        return get<3>(state->state) < neutral_guard_reward_outcome;
+    }
+
     shared_ptr<mcts::IntActionVector> GuardedMazeEnv::get_valid_actions(
         shared_ptr<const mcts::Int4TupleState> state) const
     {
@@ -260,6 +264,10 @@ namespace mcts::exp {
 
     bool GuardedMazeEnv::is_sink_state_itfc(shared_ptr<const mcts::State> state) const {
         return is_sink_state(static_pointer_cast<const mcts::Int4TupleState>(state));
+    }
+
+    bool GuardedMazeEnv::is_catastrophic_state_itfc(shared_ptr<const mcts::State> state) const {
+        return is_catastrophic_state(static_pointer_cast<const mcts::Int4TupleState>(state));
     }
 
     shared_ptr<mcts::ActionVector> GuardedMazeEnv::get_valid_actions_itfc(

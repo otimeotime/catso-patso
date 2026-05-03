@@ -24,7 +24,9 @@ namespace mcts {
                 static_pointer_cast<const MctsDNode>(parent)),
             num_backups(0),
             avg_return(0.0),
-            next_state_distr(mcts_manager->mcts_env->get_transition_distribution_itfc(state,action))
+            next_state_distr(mcts_manager->mcts_env->get_transition_distribution_itfc(state,action)),
+            track_empirical_cvar(parent != nullptr && parent->is_root_node()),
+            empirical_return_samples()
     {  
     }
 
@@ -59,6 +61,9 @@ namespace mcts {
     void UctCNode::backup_average_return(const double trial_return_after_node) {
         num_backups++;
         avg_return += (trial_return_after_node - avg_return) / (double) num_backups;
+        if (track_empirical_cvar) {
+            empirical_return_samples.push_back(trial_return_after_node);
+        }
     }
 
     /**
@@ -95,6 +100,10 @@ namespace mcts {
         stringstream ss;
         ss << avg_return;
         return ss.str();
+    }
+
+    double UctCNode::get_cvar_value_at(double alpha) const {
+        return compute_empirical_lower_tail_cvar_from_samples(empirical_return_samples, alpha);
     }
 }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot a CATSO/PATSO experiment summary CSV.
+"""Plot an experiment summary CSV.
 
 Replaces plot.ipynb. Reads a single results_<env>_summary.csv and writes five
 PDFs into an output directory.
@@ -7,7 +7,7 @@ PDFs into an output directory.
 Usage:
     python3 plot.py results_bettinggame_summary.csv
     python3 plot.py results_guarded_maze_summary.csv --outdir plots --title "Guarded Maze"
-    python3 plot.py results_bettinggame_summary.csv --algos UCT CATSO PATSO
+    python3 plot.py results_bettinggame_summary.csv --algos UCT MaxUCT PowerUCT CATSO PATSO
 
 Notes:
 - mc_cvar_stddev is only emitted by run_bettinggame and run_autonomous_vehicle.
@@ -42,8 +42,31 @@ REQUIRED_COLUMNS = {
 # Optional columns: if present we draw stddev bands, otherwise we just draw the line.
 OPTIONAL_COLUMNS = {"mc_cvar_stddev"}
 
-DEFAULT_ALGOS = ["UCT", "CATSO", "PATSO"]
-DEFAULT_COLORS = ["#1f77b4", "#d62728", "#9467bd"]
+DEFAULT_ALGOS = ["UCT", "MaxUCT", "PowerUCT", "CATSO", "PATSO"]
+DEFAULT_COLORS = ["#1f77b4", "#2ca02c", "#ff7f0e", "#d62728", "#9467bd"]
+DEFAULT_COLOR_BY_ALGO = {
+    "UCT": "#1f77b4",
+    "MaxUCT": "#2ca02c",
+    "PowerUCT": "#ff7f0e",
+    "CATSO": "#d62728",
+    "PATSO": "#9467bd",
+}
+
+
+def default_colors_for_algos(algos: list[str]) -> list[str]:
+    fallback_palette = mpl.rcParams["axes.prop_cycle"].by_key().get("color", DEFAULT_COLORS)
+    fallback_idx = 0
+    colors: list[str] = []
+
+    for algo in algos:
+        if algo in DEFAULT_COLOR_BY_ALGO:
+            colors.append(DEFAULT_COLOR_BY_ALGO[algo])
+            continue
+
+        colors.append(fallback_palette[fallback_idx % len(fallback_palette)])
+        fallback_idx += 1
+
+    return colors
 
 
 def configure_matplotlib() -> None:
@@ -168,7 +191,7 @@ def save_plot(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Plot a CATSO/PATSO experiment summary CSV.",
+        description="Plot an experiment summary CSV.",
     )
     parser.add_argument(
         "csv",
@@ -209,9 +232,7 @@ def main() -> int:
             )
         colors = args.colors
     else:
-        colors = (DEFAULT_COLORS * ((len(args.algos) // len(DEFAULT_COLORS)) + 1))[
-            : len(args.algos)
-        ]
+        colors = default_colors_for_algos(args.algos)
 
     rows, present_optional = load_rows(args.csv)
     env_name = rows[0]["env"]

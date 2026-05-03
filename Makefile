@@ -51,6 +51,24 @@ TUNE_BETTINGGAME_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(TUNE_BETTINGGAME
 TUNE_AUTONOMOUS_VEHICLE_SOURCES = src/exp/tune_autonomous_vehicle.cpp
 TUNE_AUTONOMOUS_VEHICLE_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(TUNE_AUTONOMOUS_VEHICLE_SOURCES))
 
+# Generic experiment infrastructure
+EXP_COMMON_SOURCES = \
+	src/exp/algorithm_factory.cpp \
+	src/exp/evaluation_utils.cpp \
+	src/exp/experiment_runner.cpp \
+	src/exp/tuning_runner.cpp \
+	src/exp/env_registry.cpp \
+	src/exp/register_all_envs.cpp \
+	$(wildcard src/exp/env_specs/*.cpp) \
+	$(wildcard src/exp/oracles/*.cpp)
+EXP_COMMON_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(EXP_COMMON_SOURCES))
+
+RUN_EXPERIMENT_SOURCES = src/exp/run_experiment.cpp
+RUN_EXPERIMENT_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(RUN_EXPERIMENT_SOURCES))
+
+TUNE_EXPERIMENT_SOURCES = src/exp/tune_experiment.cpp
+TUNE_EXPERIMENT_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(TUNE_EXPERIMENT_SOURCES))
+
 # FrozenLake experiment with tuned parameters
 RUN_SOURCES = src/exp/run_frozenlake.cpp
 RUN_OBJECTS = $(patsubst src/%.cpp, bin/src/%.o, $(RUN_SOURCES))
@@ -176,6 +194,7 @@ TARGET_MCTS_EVAL_AUTONOMOUS_VEHICLE = mcts-eval-autonomous-vehicle
 TARGET_MCTS_EVAL_GUARDED_MAZE = mcts-eval-guarded-maze
 TARGET_MCTS_EVAL_LUNAR_LANDER = mcts-eval-lunar-lander
 TARGET_MCTS_TUNE_AUTONOMOUS_VEHICLE = mcts-tune-autonomous-vehicle
+TARGET_MCTS_TUNE_GENERIC = mcts-tune
 TARGET_MCTS_RUN = mcts-run-frozenlake
 TARGET_MCTS_RUN_SAILING = mcts-run-sailing
 TARGET_MCTS_RUN_TAXI = mcts-run-taxi
@@ -192,6 +211,7 @@ TARGET_MCTS_RUN_LASER_TAG_SAFE_GRID = mcts-run-laser-tag-safe-grid
 TARGET_MCTS_RUN_RIVER_SWIM_STOCHASTIC = mcts-run-river-swim-stochastic
 TARGET_MCTS_RUN_TWO_LEVEL_RISKY_TREASURE = mcts-run-two-level-risky-treasure
 TARGET_MCTS_RUN_STREE = mcts-run-stree
+TARGET_MCTS_RUN_GENERIC = mcts-run
 TARGET_MCTS_VarDE_DBG = mcts-debug-varde
 TARGET_MCTS_DENTS_DBG = mcts-debug-dents
 TARGET_MCTS_VarDE_DBG_SAILING = mcts-debug-varde-sailing
@@ -223,6 +243,9 @@ DEPFILES = \
 	$(EVAL_GUARDED_MAZE_OBJECTS:.o=.d) \
 	$(EVAL_LUNAR_LANDER_OBJECTS:.o=.d) \
 	$(TUNE_AUTONOMOUS_VEHICLE_OBJECTS:.o=.d) \
+	$(EXP_COMMON_OBJECTS:.o=.d) \
+	$(RUN_EXPERIMENT_OBJECTS:.o=.d) \
+	$(TUNE_EXPERIMENT_OBJECTS:.o=.d) \
 	$(RUN_OBJECTS:.o=.d) \
 	$(RUN_SAILING_OBJECTS:.o=.d) \
 	$(RUN_TAXI_OBJECTS:.o=.d) \
@@ -324,6 +347,21 @@ $(EVAL_LUNAR_LANDER_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 
 # Build autonomous vehicle tuner object files rule
 $(TUNE_AUTONOMOUS_VEHICLE_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
+
+# Build generic experiment object files rule
+$(EXP_COMMON_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
+
+# Build generic run entrypoint object files rule
+$(RUN_EXPERIMENT_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
+
+# Build generic tune entrypoint object files rule
+$(TUNE_EXPERIMENT_OBJECTS): $$(patsubst $(BIN_DIR)/%.o, %.cpp, $$@)
 	@mkdir -p $(@D)
 	$(CXX) $(CPPFLAGS) $(DEPFLAGS) -c -o $@ $<
 
@@ -496,6 +534,10 @@ $(TARGET_MCTS_EVAL_LUNAR_LANDER): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(EVAL_LUNAR_
 $(TARGET_MCTS_TUNE_AUTONOMOUS_VEHICLE): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(TUNE_AUTONOMOUS_VEHICLE_OBJECTS)
 	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
 
+# Build generic experiment tuner
+$(TARGET_MCTS_TUNE_GENERIC): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(EXP_COMMON_OBJECTS) $(TUNE_EXPERIMENT_OBJECTS)
+	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
+
 # Build FrozenLake experiment with tuned parameters
 $(TARGET_MCTS_RUN): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(RUN_OBJECTS)
 	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
@@ -560,6 +602,10 @@ $(TARGET_MCTS_RUN_TWO_LEVEL_RISKY_TREASURE): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(
 $(TARGET_MCTS_RUN_STREE): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(RUN_STREE_OBJECTS)
 	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
 
+# Build generic experiment runner
+$(TARGET_MCTS_RUN_GENERIC): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(EXP_COMMON_OBJECTS) $(RUN_EXPERIMENT_OBJECTS)
+	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
+
 # Build VarDE debug binary
 $(TARGET_MCTS_VarDE_DBG): $(COMMON_OBJECTS) $(ENV_OBJECTS) $(VarDE_DBG_OBJECTS)
 	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
@@ -610,6 +656,7 @@ clean:
 	@[ -f $(TARGET_MCTS_TUNE_TAXI) ] && @rm $(TARGET_MCTS_TUNE_TAXI) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_TUNE_STREE) ] && @rm $(TARGET_MCTS_TUNE_STREE) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_TUNE_BETTINGGAME) ] && @rm $(TARGET_MCTS_TUNE_BETTINGGAME) > /dev/null 2> /dev/null || :
+	@[ -f $(TARGET_MCTS_TUNE_GENERIC) ] && @rm $(TARGET_MCTS_TUNE_GENERIC) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_EVAL_BETTINGGAME) ] && @rm $(TARGET_MCTS_EVAL_BETTINGGAME) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_EVAL_AUTONOMOUS_VEHICLE) ] && @rm $(TARGET_MCTS_EVAL_AUTONOMOUS_VEHICLE) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_EVAL_GUARDED_MAZE) ] && @rm $(TARGET_MCTS_EVAL_GUARDED_MAZE) > /dev/null 2> /dev/null || :
@@ -619,6 +666,7 @@ clean:
 	@[ -f $(TARGET_MCTS_RUN_SAILING) ] && @rm $(TARGET_MCTS_RUN_SAILING) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_RUN_TAXI) ] && @rm $(TARGET_MCTS_RUN_TAXI) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_RUN_BETTINGGAME) ] && @rm $(TARGET_MCTS_RUN_BETTINGGAME) > /dev/null 2> /dev/null || :
+	@[ -f $(TARGET_MCTS_RUN_GENERIC) ] && @rm $(TARGET_MCTS_RUN_GENERIC) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_RUN_RISKY_SHORTCUT_GRIDWORLD) ] && @rm $(TARGET_MCTS_RUN_RISKY_SHORTCUT_GRIDWORLD) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_RUN_AUTONOMOUS_VEHICLE) ] && @rm $(TARGET_MCTS_RUN_AUTONOMOUS_VEHICLE) > /dev/null 2> /dev/null || :
 	@[ -f $(TARGET_MCTS_RUN_GUARDED_MAZE) ] && @rm $(TARGET_MCTS_RUN_GUARDED_MAZE) > /dev/null 2> /dev/null || :

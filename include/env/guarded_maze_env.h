@@ -57,6 +57,7 @@ namespace mcts::exp {
 
             std::shared_ptr<const mcts::Int4TupleState> get_initial_state() const;
             bool is_sink_state(std::shared_ptr<const mcts::Int4TupleState> state) const;
+            bool is_catastrophic_state(std::shared_ptr<const mcts::Int4TupleState> state) const;
             std::shared_ptr<mcts::IntActionVector> get_valid_actions(
                 std::shared_ptr<const mcts::Int4TupleState> state) const;
             std::shared_ptr<mcts::Int4TupleStateDistr> get_transition_distribution(
@@ -73,6 +74,7 @@ namespace mcts::exp {
 
             virtual std::shared_ptr<const mcts::State> get_initial_state_itfc() const override;
             virtual bool is_sink_state_itfc(std::shared_ptr<const mcts::State> state) const override;
+            virtual bool is_catastrophic_state_itfc(std::shared_ptr<const mcts::State> state) const override;
             virtual std::shared_ptr<mcts::ActionVector> get_valid_actions_itfc(
                 std::shared_ptr<const mcts::State> state) const override;
             virtual std::shared_ptr<mcts::StateDistr> get_transition_distribution_itfc(

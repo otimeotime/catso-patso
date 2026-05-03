@@ -4,6 +4,7 @@
 #include "algorithms/catso/patso_manager.h"
 #include "algorithms/ments/dents/dents_manager.h"
 #include "algorithms/ments/ments_manager.h"
+#include "algorithms/uct/power_uct_manager.h"
 #include "algorithms/uct/uct_manager.h"
 #include "algorithms/varde/varde_manager.h"
 #include "mcts_manager.h"
@@ -28,6 +29,20 @@ namespace mcts::exp {
             return "";
         }
 
+        if (auto power_uct = std::dynamic_pointer_cast<const mcts::PowerUctManager>(mgr)) {
+            std::ostringstream ss;
+            ss << "bias=";
+            if (power_uct->bias == mcts::UctManager::USE_AUTO_BIAS) {
+                ss << "auto";
+            }
+            else {
+                ss << format_manager_double(power_uct->bias);
+            }
+            ss << ",epsilon=" << format_manager_double(power_uct->epsilon_exploration)
+               << ",p=" << format_manager_double(power_uct->power_mean_constant);
+            return ss.str();
+        }
+
         if (auto uct = std::dynamic_pointer_cast<const mcts::UctManager>(mgr)) {
             std::ostringstream ss;
             ss << "bias=";
@@ -46,7 +61,7 @@ namespace mcts::exp {
             ss << "max_particles=" << patso->max_particles
                << ",optimism=" << format_manager_double(patso->optimism_constant)
                << ",p=" << format_manager_double(patso->power_mean_exponent)
-               << ",tau=" << format_manager_double(patso->cvar_tau);
+               << ",cvar_tau=" << format_manager_double(patso->cvar_tau);
             return ss.str();
         }
 
@@ -55,7 +70,7 @@ namespace mcts::exp {
             ss << "n_atoms=" << catso->n_atoms
                << ",optimism=" << format_manager_double(catso->optimism_constant)
                << ",p=" << format_manager_double(catso->power_mean_exponent)
-               << ",tau=" << format_manager_double(catso->cvar_tau);
+               << ",cvar_tau=" << format_manager_double(catso->cvar_tau);
             return ss.str();
         }
 
