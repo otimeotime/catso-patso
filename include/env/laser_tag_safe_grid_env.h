@@ -46,7 +46,7 @@ namespace mcts::exp {
 
         public:
             LaserTagSafeGridEnv(
-                int N = 9,
+                int N = 5,
                 double obstacles_frac = 0.12,
                 double eps_shot = 0.08,
                 double step_cost = -1.0,

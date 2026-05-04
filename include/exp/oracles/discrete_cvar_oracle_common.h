@@ -84,7 +84,7 @@ namespace mcts::exp::oracles {
             return metrics;
         }
 
-        metrics.cvar_regret = root_solution.optimal_cvar - estimated_action_cvar;
+        metrics.cvar_regret = std::abs(root_solution.optimal_cvar - estimated_action_cvar);
         metrics.optimal_action_hit =
             (metrics.cvar_regret <= optimal_action_regret_threshold + kCvarTolerance) ? 1.0 : 0.0;
         return metrics;

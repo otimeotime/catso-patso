@@ -350,7 +350,7 @@ namespace {
         const int rid = static_pointer_cast<const mcts::IntAction>(recommended)->action;
         const auto it = root_solution.action_cvars.find(rid);
         if (it != root_solution.action_cvars.end()) {
-            m.cvar_regret = root_solution.optimal_cvar - it->second;
+            m.cvar_regret = std::abs(root_solution.optimal_cvar - it->second);
             if (m.cvar_regret <= kCvarTolerance) m.optimal_action_hit = 1.0;
         }
     }

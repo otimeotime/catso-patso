@@ -380,7 +380,7 @@ namespace {
 
         const auto action_cvar_it = root_solution.action_cvars.find(recommended_action_id);
         if (action_cvar_it != root_solution.action_cvars.end()) {
-            metrics.cvar_regret = root_solution.optimal_cvar - action_cvar_it->second;
+            metrics.cvar_regret = std::abs(root_solution.optimal_cvar - action_cvar_it->second);
             if (metrics.cvar_regret <= optimal_action_regret_threshold + kCvarTolerance) {
                 metrics.optimal_action_hit = 1.0;
             }

@@ -1,5 +1,4 @@
 #include "env/laser_tag_safe_grid_env.h"
-
 #include "env/discrete_env_utils.h"
 #include "helper_templates.h"
 

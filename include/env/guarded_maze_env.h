@@ -5,6 +5,8 @@
 
 #include <array>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace mcts::exp {
     class GuardedMazeEnv : public mcts::MctsEnv {
@@ -15,12 +17,14 @@ namespace mcts::exp {
             static constexpr int left_action = 2;
             static constexpr int up_action = 3;
 
-            static constexpr int num_rows = 8;
-            static constexpr int num_cols = 8;
             static constexpr int num_guard_reward_outcomes = 5;
             static constexpr int neutral_guard_reward_outcome = 2;
+            using MazeLayout = std::vector<std::string>;
 
         private:
+            MazeLayout maze_layout;
+            int num_rows;
+            int num_cols;
             std::array<int, 2> start;
             std::array<int, 2> goal;
             std::array<int, 2> guard;
@@ -46,7 +50,10 @@ namespace mcts::exp {
             double guard_reward_probability(int outcome_index) const;
 
         public:
+            static MazeLayout default_maze_layout();
+
             GuardedMazeEnv(
+                MazeLayout maze_layout = default_maze_layout(),
                 std::array<int, 2> start = {6, 1},
                 std::array<int, 2> goal = {5, 6},
                 std::array<int, 2> guard = {6, 5},

@@ -14,6 +14,7 @@ namespace mcts::exp::oracles {
 
             std::shared_ptr<const mcts::exp::GuardedMazeEnv> env;
             double tau;
+            double discount_gamma;
             std::map<StateKey, OptimalDistributionSolution> memo;
 
             static StateKey make_key(std::shared_ptr<const mcts::Int4TupleState> state);
@@ -21,7 +22,8 @@ namespace mcts::exp::oracles {
         public:
             GuardedMazeCvarOracle(
                 std::shared_ptr<const mcts::exp::GuardedMazeEnv> env,
-                double tau);
+                double tau,
+                double discount_gamma = 1.0);
 
             const OptimalDistributionSolution& solve_state(
                 std::shared_ptr<const mcts::Int4TupleState> state);

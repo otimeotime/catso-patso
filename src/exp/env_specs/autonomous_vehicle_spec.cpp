@@ -1,6 +1,7 @@
 #include "exp/experiment_spec.h"
 
 #include "env/autonomous_vehicle_env.h"
+#include "exp/env_specs/generic_discrete_env_spec_helpers.h"
 #include "exp/oracles/autonomous_vehicle_cvar_oracle.h"
 
 #include <algorithm>
@@ -13,9 +14,9 @@ namespace mcts::exp {
         ExperimentSpec spec;
 
         constexpr int kMaxSteps = 7;
-        constexpr double kCvarTau = 0.1;
-        constexpr int kEvalRollouts = 50;
-        constexpr int kRuns = 3;
+        constexpr double kCvarTau = 0.05;
+        constexpr int kEvalRollouts = 200;
+        constexpr int kRuns = 50;
         constexpr int kThreads = 8;
         constexpr int kBaseSeed = 4242;
 
@@ -29,22 +30,38 @@ namespace mcts::exp {
         spec.threads = kThreads;
         spec.base_seed = kBaseSeed;
         spec.cvar_tau = kCvarTau;
-        spec.trial_counts = {1000, 2000, 3000, 4000, 5000, 10000, 20000, 30000, 40000, 50000, 60000};
+        spec.discount_gamma = 1.0;
+        spec.trial_counts = {100, 200, 500, 1000, 2000, 5000, 10000, 15000, 20000, 30000, 40000, 50000, 60000, 70000, 80000, 90000, 100000};
 
-        spec.run_candidate_config.catso_n_atoms = 100;
-        spec.run_candidate_config.catso_optimism = 2.0;
-        spec.run_candidate_config.power_mean_exponent = 1.0;
-        spec.run_candidate_config.patso_particles = 128;
-        spec.run_candidate_config.patso_optimism = 4.0;
-        spec.run_candidate_config.uct_epsilon = 0.05;
+        mcts::exp::env_specs::configure_uct_family_run_config(
+            spec.run_candidate_config,
+            0.2,
+            10,
+            false,
+            1.0);
+        mcts::exp::env_specs::configure_distributional_run_config(
+            spec.run_candidate_config,
+            100,
+            4.0,
+            64,
+            2.0,
+            1.0);
 
-        spec.tuning_grid_config.catso_n_atoms_values = {25, 51, 100};
-        spec.tuning_grid_config.catso_optimism_values = {0.5, 1.0, 2.0, 4.0};
-        spec.tuning_grid_config.patso_particles_values = {32, 64, 128};
-        spec.tuning_grid_config.patso_optimism_values = {0.5, 1.0, 2.0, 4.0};
-        spec.tuning_grid_config.tau_values = {0.05, 0.1, 0.2, 0.25};
+        mcts::exp::env_specs::configure_uct_family_tuning_grid(
+            spec.tuning_grid_config,
+            {mcts::UctManagerArgs::USE_AUTO_BIAS, 2.0, 5.0, 10.0},
+            {0.05, 0.1, 0.2, 0.5},
+            {1.0, 2.0, 4.0, 8.0});
+        mcts::exp::env_specs::configure_distributional_tuning_grid(
+            spec.tuning_grid_config,
+            {25, 51, 100},
+            {0.5, 1.0, 2.0, 4.0},
+            {32, 64, 128},
+            {0.5, 1.0, 2.0, 4.0},
+            {1.0, 2.0, 4.0, 8.0},
+            {0.05, 0.1, 0.2, 0.25});
         spec.tune_total_trials = 50000;
-        spec.tune_runs = 10;
+        spec.tune_runs = 3;
         spec.tune_threads = kThreads;
         spec.progress_batch_trials = 5000;
 
@@ -122,17 +139,23 @@ namespace mcts::exp {
         };
 
         auto oracle_cache =
-            std::make_shared<std::map<double, std::shared_ptr<mcts::exp::oracles::AutonomousVehicleCvarOracle>>>();
+            std::make_shared<std::map<
+                std::pair<double, double>,
+                std::shared_ptr<mcts::exp::oracles::AutonomousVehicleCvarOracle>>>();
         spec.evaluate_root_metrics =
             [oracle_cache](
                 std::shared_ptr<const mcts::MctsEnv> generic_env,
                 std::shared_ptr<const mcts::MctsDNode> root,
-                double eval_tau)
+                double eval_tau,
+                double discount_gamma)
             {
                 const auto env = std::static_pointer_cast<const mcts::exp::AutonomousVehicleEnv>(generic_env);
-                auto& oracle = (*oracle_cache)[eval_tau];
+                auto& oracle = (*oracle_cache)[{eval_tau, discount_gamma}];
                 if (!oracle) {
-                    oracle = std::make_shared<mcts::exp::oracles::AutonomousVehicleCvarOracle>(env, eval_tau);
+                    oracle = std::make_shared<mcts::exp::oracles::AutonomousVehicleCvarOracle>(
+                        env,
+                        eval_tau,
+                        discount_gamma);
                 }
                 const auto& root_solution = oracle->solve_state(env->get_initial_state());
                 return mcts::exp::oracles::evaluate_autonomous_vehicle_root_metrics(

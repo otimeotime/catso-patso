@@ -310,7 +310,8 @@ namespace mcts {
             child_value = child->value_estimate;
         }
 
-        update_distribution(immediate_reward + 0.95 * child_value);
+        const double discount_gamma = static_cast<const CatsoManager&>(*mcts_manager).discount_gamma;
+        update_distribution(immediate_reward + discount_gamma * child_value);
         mean_value = compute_mean_value();
     }
 

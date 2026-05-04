@@ -77,6 +77,22 @@ namespace mcts::exp {
         time = get<2>(state->state);
     }
 
+    bool RiskyShortcutGridworldEnv::is_action_valid(int row, int col, int action) const {
+        if (action == up_action) {
+            return row > 0;
+        }
+        if (action == right_action) {
+            return col < grid_size - 1;
+        }
+        if (action == down_action) {
+            return row < grid_size - 1;
+        }
+        if (action == left_action) {
+            return col > 0;
+        }
+        return false;
+    }
+
     pair<int, int> RiskyShortcutGridworldEnv::clip(int row, int col) const {
         return {
             max(0, min(grid_size - 1, row)),
@@ -145,8 +161,17 @@ namespace mcts::exp {
         if (is_sink_state(state)) {
             return actions;
         }
+
+        int row = 0;
+        int col = 0;
+        int time = 0;
+        decode_state(state, row, col, time);
+        (void)time;
+
         for (int action = 0; action < num_actions; ++action) {
-            actions->push_back(make_shared<const mcts::IntAction>(action));
+            if (is_action_valid(row, col, action)) {
+                actions->push_back(make_shared<const mcts::IntAction>(action));
+            }
         }
         return actions;
     }
@@ -166,9 +191,25 @@ namespace mcts::exp {
         int time = 0;
         decode_state(state, row, col, time);
 
-        vector<double> realised_action_probs(num_actions, slip_prob / static_cast<double>(num_actions));
-        if (action->action < 0 || action->action >= num_actions) {
-            throw runtime_error("RiskyShortcutGridworldEnv: invalid action");
+        if (!is_action_valid(row, col, action->action)) {
+            throw runtime_error("RiskyShortcutGridworldEnv: invalid action for current state");
+        }
+
+        vector<int> legal_actions;
+        legal_actions.reserve(num_actions);
+        for (int candidate = 0; candidate < num_actions; ++candidate) {
+            if (is_action_valid(row, col, candidate)) {
+                legal_actions.push_back(candidate);
+            }
+        }
+        if (legal_actions.empty()) {
+            throw runtime_error("RiskyShortcutGridworldEnv: non-sink state has no legal actions");
+        }
+
+        vector<double> realised_action_probs(num_actions, 0.0);
+        const double slip_mass_per_legal_action = slip_prob / static_cast<double>(legal_actions.size());
+        for (int legal_action : legal_actions) {
+            realised_action_probs[legal_action] = slip_mass_per_legal_action;
         }
         realised_action_probs[action->action] += 1.0 - slip_prob;
 
@@ -243,6 +284,12 @@ namespace mcts::exp {
             expected_reward += probability * reward_for_observation(next_state);
         }
         return expected_reward;
+    }
+
+    vector<int> RiskyShortcutGridworldEnv::get_windy_cols() const {
+        vector<int> cols(windy_cols.begin(), windy_cols.end());
+        sort(cols.begin(), cols.end());
+        return cols;
     }
 
     shared_ptr<const mcts::State> RiskyShortcutGridworldEnv::get_initial_state_itfc() const {

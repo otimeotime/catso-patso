@@ -44,18 +44,9 @@ namespace mcts {
         return sample_observation_random();
     }
 
-    void PowerUctCNode::backup_power_mean_return(const double immediate_reward) {
+    void PowerUctCNode::backup_power_mean_return(const double trial_return_after_node) {
         num_backups++;
-        power_return = immediate_reward;
-        double tmp = 0.0;
-        for (const auto& [next_state, prob] : *next_state_distr) {
-            if (has_child_node(next_state)) {
-                shared_ptr<PowerUctDNode> child_node = get_child_node(next_state);
-                tmp += child_node->num_visits * child_node->power_return;
-            }
-        }
-        tmp /= num_visits;
-        power_return += tmp;
+        power_return += (trial_return_after_node - power_return) / static_cast<double>(num_backups);
     }
 
     void PowerUctCNode::backup(
@@ -68,9 +59,8 @@ namespace mcts {
         (void) trial_rewards_before_node;
         (void) trial_cumulative_return;
         (void) ctx;
-        (void)trial_cumulative_return_after_node;
-        const double immediate_reward = trial_rewards_after_node.back();
-        backup_power_mean_return(immediate_reward);
+        (void) trial_rewards_after_node;
+        backup_power_mean_return(trial_cumulative_return_after_node);
         if (track_empirical_cvar) {
             empirical_return_samples.push_back(trial_cumulative_return_after_node);
         }

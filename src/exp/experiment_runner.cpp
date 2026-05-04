@@ -77,6 +77,7 @@ namespace mcts::exp {
         else {
             std::cout << "[exp] " << spec.display_name << "\n";
         }
+        std::cout << "  Discount gamma: " << spec.discount_gamma << "\n";
 
         std::cout << "  Algorithms: " << candidates.size()
                   << ", Runs: " << spec.runs
@@ -136,7 +137,8 @@ namespace mcts::exp {
                         metrics = spec.evaluate_root_metrics(
                             std::static_pointer_cast<const mcts::MctsEnv>(env),
                             std::static_pointer_cast<const mcts::MctsDNode>(root),
-                            cand.eval_tau);
+                            cand.eval_tau,
+                            spec.discount_gamma);
                     }
 
                     out << spec.env_name << "," << cand.algo << "," << run

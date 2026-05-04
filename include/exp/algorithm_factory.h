@@ -11,37 +11,111 @@
 #include <vector>
 
 namespace mcts::exp {
-    struct RunCandidateConfig {
-        double uct_bias = mcts::UctManagerArgs::USE_AUTO_BIAS;
-        bool uct_use_auto_bias = true;
-        double uct_epsilon = 0.1;
-
-        int catso_n_atoms = 100;
-        double catso_optimism = 4.0;
-        double power_mean_exponent = 1.0;
-
-        int patso_particles = 100;
-        double patso_optimism = 4.0;
+    struct UctRunConfig {
+        bool enabled = true;
+        // double bias = mcts::UctManagerArgs::USE_AUTO_BIAS;
+        double bias = 5;
+        bool use_auto_bias = true;
+        double epsilon = 0.05;
     };
 
-    struct TuningGridConfig {
-        std::vector<double> uct_bias_values = {
+    struct MaxUctRunConfig {
+        bool enabled = true;
+        double bias = 5;
+        bool use_auto_bias = true;
+        double epsilon = 0.05;
+    };
+
+    struct PowerUctRunConfig {
+        bool enabled = true;
+        double bias = mcts::UctManagerArgs::USE_AUTO_BIAS;
+        bool use_auto_bias = true;
+        double epsilon = 0.05;
+        double power_mean_exponent = 1.0;
+    };
+
+    struct CatsoRunConfig {
+        bool enabled = true;
+        int n_atoms = 100;
+        double optimism = 8.0;
+        double power_mean_exponent = 1.0;
+    };
+
+    struct PatsoRunConfig {
+        bool enabled = true;
+        int max_particles = 32;
+        double optimism = 8.0;
+        double power_mean_exponent = 1.0;
+    };
+
+    // Env specs choose the run-time algorithm set by toggling `enabled` in each
+    // nested block and then overriding only the hyperparameters they care about.
+    struct RunCandidateConfig {
+        UctRunConfig uct;
+        MaxUctRunConfig max_uct;
+        PowerUctRunConfig power_uct;
+        CatsoRunConfig catso;
+        PatsoRunConfig patso;
+    };
+
+    struct UctTuningConfig {
+        bool enabled = true;
+        std::vector<double> bias_values = {
             mcts::UctManagerArgs::USE_AUTO_BIAS,
             2.0,
             5.0,
             10.0
         };
-        std::vector<double> uct_epsilon_values = {0.05, 0.1, 0.2, 0.5};
+        std::vector<double> epsilon_values = {0.05, 0.1, 0.2, 0.5};
+    };
 
-        std::vector<int> catso_n_atoms_values = {25, 51, 100};
-        std::vector<double> catso_optimism_values = {2.0, 4.0, 8.0};
+    struct MaxUctTuningConfig {
+        bool enabled = true;
+        std::vector<double> bias_values = {
+            mcts::UctManagerArgs::USE_AUTO_BIAS,
+            2.0,
+            5.0,
+            10.0
+        };
+        std::vector<double> epsilon_values = {0.05, 0.1, 0.2, 0.5};
+    };
 
-        std::vector<int> patso_particles_values = {32, 64, 128};
-        std::vector<double> patso_optimism_values = {2.0, 4.0, 8.0};
-
-        // The current repo tuning code fixes p=1.0.
+    struct PowerUctTuningConfig {
+        bool enabled = true;
+        std::vector<double> bias_values = {
+            mcts::UctManagerArgs::USE_AUTO_BIAS,
+            2.0,
+            5.0,
+            10.0
+        };
+        std::vector<double> epsilon_values = {0.05, 0.1, 0.2, 0.5};
         std::vector<double> power_mean_exponent_values = {1.0, 2.0, 4.0, 8.0};
+    };
+
+    struct CatsoTuningConfig {
+        bool enabled = true;
+        std::vector<int> n_atoms_values = {25, 51, 100};
+        std::vector<double> optimism_values = {2.0, 4.0, 8.0};
+        std::vector<double> power_mean_exponent_values = {1.0};
         std::vector<double> tau_values = {0.05, 0.1, 0.2, 0.25};
+    };
+
+    struct PatsoTuningConfig {
+        bool enabled = true;
+        std::vector<int> max_particles_values = {32, 64, 128};
+        std::vector<double> optimism_values = {2.0, 4.0, 8.0};
+        std::vector<double> power_mean_exponent_values = {1.0};
+        std::vector<double> tau_values = {0.05, 0.1, 0.2, 0.25};
+    };
+
+    // Env specs choose the tuning search space the same way: enable the
+    // algorithms to tune and customize each per-algorithm grid independently.
+    struct TuningGridConfig {
+        UctTuningConfig uct;
+        MaxUctTuningConfig max_uct;
+        PowerUctTuningConfig power_uct;
+        CatsoTuningConfig catso;
+        PatsoTuningConfig patso;
     };
 
     struct Candidate {
@@ -62,9 +136,11 @@ namespace mcts::exp {
 
     std::vector<Candidate> build_default_run_candidates(
         double cvar_tau,
+        double discount_gamma,
         const RunCandidateConfig& config = {});
 
     std::vector<Candidate> build_default_tuning_candidates(
         double default_eval_tau,
+        double discount_gamma,
         const TuningGridConfig& config = {});
 }

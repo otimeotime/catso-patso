@@ -12,6 +12,9 @@
 #include "algorithms/catso/catso_manager.h"
 #include "algorithms/catso/patso_decision_node.h"
 #include "algorithms/catso/patso_manager.h"
+#include "algorithms/uct/max_uct_decision_node.h"
+#include "algorithms/uct/power_uct_decision_node.h"
+#include "algorithms/uct/power_uct_manager.h"
 #include "algorithms/uct/uct_decision_node.h"
 #include "algorithms/uct/uct_manager.h"
 
@@ -42,7 +45,7 @@ constexpr double kCvarTolerance = 1e-12;
 // ------------------------------------------------------------------ CLI args
 
 struct CliArgs {
-    std::string algo = "CATSO";  // UCT | CATSO | PATSO
+    std::string algo = "CATSO";  // UCT | MaxUCT | PowerUCT | CATSO | PATSO
 
     // CATSO
     int n_atoms = 51;
@@ -57,6 +60,7 @@ struct CliArgs {
 
     // Eval settings
     double cvar_tau = 0.1;
+    double discount_gamma = 1.0;
     int trial_budget = 10000;
     int num_seeds = 3;
     int base_seed = 4242;
@@ -68,11 +72,12 @@ struct CliArgs {
 
 inline void usage(std::ostream& out, const std::string& binary_name) {
     out << "Usage: " << binary_name
-        << " --algo {UCT|CATSO|PATSO} [hyperparams] [eval]\n"
+        << " --algo {UCT|MaxUCT|PowerUCT|CATSO|PATSO} [hyperparams] [eval]\n"
            "  Hyperparams (CATSO): --n-atoms INT --optimism FLOAT --power-mean FLOAT\n"
            "  Hyperparams (PATSO): --max-particles INT --optimism FLOAT --power-mean FLOAT\n"
-           "  Hyperparams (UCT)  : --uct-bias FLOAT (-1=auto) --uct-epsilon FLOAT\n"
-           "  Eval               : --cvar-tau FLOAT --trial-budget INT --num-seeds INT\n"
+           "  Hyperparams (UCT/*): --uct-bias FLOAT (-1=auto) --uct-epsilon FLOAT\n"
+           "  Hyperparams (PowerUCT): --power-mean FLOAT\n"
+           "  Eval               : --cvar-tau FLOAT --gamma FLOAT --trial-budget INT --num-seeds INT\n"
            "                       --base-seed INT --eval-rollouts INT --threads INT --horizon INT\n"
            "                       [--debug-trajectories]\n"
            "Output: ONE JSON line on stdout with averaged metrics.\n";
@@ -85,9 +90,15 @@ inline bool parse_double(const std::string& s, double& out) {
     try { out = std::stod(s); return true; } catch (...) { return false; }
 }
 
-inline CliArgs parse_args(int argc, char** argv, int default_horizon) {
+inline CliArgs parse_args(
+    int argc,
+    char** argv,
+    int default_horizon,
+    double default_discount_gamma = 1.0)
+{
     CliArgs args;
     args.horizon = default_horizon;
+    args.discount_gamma = default_discount_gamma;
     const std::string binary_name = argc > 0 ? argv[0] : "mcts-eval-<env>";
 
     for (int i = 1; i < argc; ++i) {
@@ -112,6 +123,7 @@ inline CliArgs parse_args(int argc, char** argv, int default_horizon) {
         else if (flag == "--uct-bias")       { if (!parse_double(val, args.uct_bias)) std::exit(2); }
         else if (flag == "--uct-epsilon")    { if (!parse_double(val, args.uct_epsilon)) std::exit(2); }
         else if (flag == "--cvar-tau")       { if (!parse_double(val, args.cvar_tau)) std::exit(2); }
+        else if (flag == "--gamma")          { if (!parse_double(val, args.discount_gamma)) std::exit(2); }
         else if (flag == "--trial-budget")   { if (!parse_int(val, args.trial_budget)) std::exit(2); }
         else if (flag == "--num-seeds")      { if (!parse_int(val, args.num_seeds)) std::exit(2); }
         else if (flag == "--base-seed")      { if (!parse_int(val, args.base_seed)) std::exit(2); }
@@ -125,14 +137,24 @@ inline CliArgs parse_args(int argc, char** argv, int default_horizon) {
         }
     }
 
-    if (args.algo != "UCT" && args.algo != "CATSO" && args.algo != "PATSO") {
-        std::cerr << "--algo must be UCT, CATSO, or PATSO (got " << args.algo << ")\n";
+    if (args.algo != "UCT"
+        && args.algo != "MaxUCT"
+        && args.algo != "PowerUCT"
+        && args.algo != "CATSO"
+        && args.algo != "PATSO")
+    {
+        std::cerr << "--algo must be UCT, MaxUCT, PowerUCT, CATSO, or PATSO (got "
+                  << args.algo << ")\n";
         std::exit(2);
     }
     if (args.num_seeds <= 0 || args.trial_budget <= 0 || args.eval_rollouts <= 0
         || args.horizon <= 0)
     {
         std::cerr << "num-seeds, trial-budget, eval-rollouts, horizon must all be > 0\n";
+        std::exit(2);
+    }
+    if (args.discount_gamma < 0.0 || args.discount_gamma > 1.0) {
+        std::cerr << "gamma must be in [0,1]\n";
         std::exit(2);
     }
     return args;
@@ -254,6 +276,32 @@ inline MgrAndRoot build_planner(
         return {std::static_pointer_cast<mcts::MctsManager>(mgr),
                 std::static_pointer_cast<mcts::MctsDNode>(root)};
     }
+    if (args.algo == "MaxUCT") {
+        mcts::UctManagerArgs a(env);
+        a.max_depth = max_depth;
+        a.mcts_mode = false;
+        a.bias = (args.uct_bias < 0.0) ? mcts::UctManagerArgs::USE_AUTO_BIAS : args.uct_bias;
+        a.recommend_most_visited = false;
+        a.epsilon_exploration = args.uct_epsilon;
+        a.seed = seed;
+        auto mgr = std::make_shared<mcts::UctManager>(a);
+        auto root = std::make_shared<mcts::MaxUctDNode>(mgr, init_state, 0, 0);
+        return {std::static_pointer_cast<mcts::MctsManager>(mgr),
+                std::static_pointer_cast<mcts::MctsDNode>(root)};
+    }
+    if (args.algo == "PowerUCT") {
+        mcts::PowerUctManagerArgs a(env, args.power_mean);
+        a.max_depth = max_depth;
+        a.mcts_mode = false;
+        a.bias = (args.uct_bias < 0.0) ? mcts::UctManagerArgs::USE_AUTO_BIAS : args.uct_bias;
+        a.recommend_most_visited = false;
+        a.epsilon_exploration = args.uct_epsilon;
+        a.seed = seed;
+        auto mgr = std::make_shared<mcts::PowerUctManager>(a);
+        auto root = std::make_shared<mcts::PowerUctDNode>(mgr, init_state, 0, 0);
+        return {std::static_pointer_cast<mcts::MctsManager>(mgr),
+                std::static_pointer_cast<mcts::MctsDNode>(root)};
+    }
     if (args.algo == "CATSO") {
         mcts::CatsoManagerArgs a(env);
         a.max_depth = max_depth;
@@ -262,6 +310,7 @@ inline MgrAndRoot build_planner(
         a.optimism_constant = args.optimism;
         a.power_mean_exponent = args.power_mean;
         a.cvar_tau = args.cvar_tau;
+        a.discount_gamma = args.discount_gamma;
         a.seed = seed;
         auto mgr = std::make_shared<mcts::CatsoManager>(a);
         auto root = std::make_shared<mcts::CatsoDNode>(mgr, init_state, 0, 0);
@@ -276,6 +325,7 @@ inline MgrAndRoot build_planner(
     a.optimism_constant = args.optimism;
     a.power_mean_exponent = args.power_mean;
     a.cvar_tau = args.cvar_tau;
+    a.discount_gamma = args.discount_gamma;
     a.seed = seed;
     auto mgr = std::make_shared<mcts::PatsoManager>(a);
     auto root = std::make_shared<mcts::PatsoDNode>(mgr, init_state, 0, 0);
@@ -438,7 +488,7 @@ void evaluate_root_recommendation(
     const int rid = std::static_pointer_cast<const mcts::IntAction>(recommended)->action;
     const auto it = root_solution.action_cvars.find(rid);
     if (it != root_solution.action_cvars.end()) {
-        m.cvar_regret = root_solution.optimal_cvar - it->second;
+        m.cvar_regret = std::abs(root_solution.optimal_cvar - it->second);
         if (m.cvar_regret <= kCvarTolerance) m.optimal_action_hit = 1.0;
     }
 }

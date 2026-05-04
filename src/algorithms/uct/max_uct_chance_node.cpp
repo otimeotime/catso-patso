@@ -45,18 +45,9 @@ namespace mcts {
         return sample_observation_random();
     }
 
-    void MaxUctCNode::backup_max_return(const double immediate_reward) {
+    void MaxUctCNode::backup_max_return(const double trial_return_after_node) {
         num_backups++;
-        max_return = immediate_reward;
-        double tmp = 0.0;
-        for (const auto& [next_state, prob] : *next_state_distr) {
-            if (has_child_node(next_state)) {
-                shared_ptr<MaxUctDNode> child_node = get_child_node(next_state);
-                tmp += child_node->num_visits * child_node->max_return;
-            }
-        }
-        tmp /= num_visits;
-        max_return += tmp;
+        max_return += (trial_return_after_node - max_return) / static_cast<double>(num_backups);
     }
 
     void MaxUctCNode::backup(
@@ -69,9 +60,8 @@ namespace mcts {
         (void) trial_rewards_before_node;
         (void) trial_cumulative_return;
         (void) ctx;
-        (void)trial_cumulative_return_after_node;
-        const double immediate_reward = trial_rewards_after_node.back();
-        backup_max_return(immediate_reward);
+        (void) trial_rewards_after_node;
+        backup_max_return(trial_cumulative_return_after_node);
         if (track_empirical_cvar) {
             empirical_return_samples.push_back(trial_cumulative_return_after_node);
         }

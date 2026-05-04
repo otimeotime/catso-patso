@@ -16,17 +16,14 @@ int main(int argc, char** argv) {
     constexpr double kCvarTau = 0.05;
     constexpr int kEvalRollouts = 200;
     constexpr int kRuns = 3;
-    constexpr int kThreads = 8;
+    constexpr int kThreads = 4;
     constexpr int kBaseSeed = 4242;
     constexpr int kCatsoAtoms = 51;
     constexpr double kOptimism = 1.0;
     constexpr double kPowerMeanExponent = 1.0;
     constexpr int kPatsoParticles = 64;
 
-    vector<int> trial_counts;
-    for (int i = 1; i <= 20; ++i) {
-        trial_counts.push_back(i * 1000);
-    }
+    vector<int> trial_counts = {5000, 10000, 20000};
 
     auto env = make_shared<mcts::exp::ThinIceFrozenLakePlusEnv>();
     const string extra_info = "N=8, max_steps=640, slip_prob=0.15, break_prob=0.1";

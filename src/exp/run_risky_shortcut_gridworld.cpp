@@ -11,29 +11,26 @@ int main(int argc, char** argv) {
     (void)argc;
     (void)argv;
 
-    constexpr int kGridSize = 4;
-    constexpr double kSlipProb = 0.40;
-    constexpr double kWindProb = 0.70;
+    constexpr int kGridSize = 5;
+    constexpr double kSlipProb = 0.02;
+    constexpr double kWindProb = 0.005;
     constexpr double kStepCost = -1.0;
-    constexpr double kGoalReward = 50.0;
-    constexpr double kCliffPenalty = -100.0;
-    constexpr int kMaxSteps = 40;
-    constexpr double kCvarTau = 0.05;
-    constexpr int kEvalRollouts = 200;
-    constexpr int kRuns = 3;
-    constexpr int kThreads = 8;
+    constexpr double kGoalReward = 20.0;
+    constexpr double kCliffPenalty = -20.0;
+    constexpr int kMaxSteps = 32;
+    constexpr double kCvarTau = 0.1;
+    constexpr int kEvalRollouts = 50;
+    constexpr int kRuns = 1;
+    constexpr int kThreads = 4;
     constexpr int kBaseSeed = 4242;
     constexpr int kCatsoAtoms = 100;
-    constexpr double kCatsoOptimism = 8.0;
+    constexpr double kCatsoOptimism = 2.0;
     constexpr double kPowerMeanExponent = 1.0;
     constexpr int kPatsoParticles = 100;
-    constexpr double kPatsoOptimism = 8.0;
+    constexpr double kPatsoOptimism = 2.0;
     constexpr double kUctEpsilon = 0.1;
 
-    vector<int> trial_counts;
-    for (int i = 1; i <= 60; ++i) {
-        trial_counts.push_back(i * 1000);
-    }
+    vector<int> trial_counts = {10000, 20000, 30000};
 
     auto env = make_shared<mcts::exp::RiskyShortcutGridworldEnv>(
         kGridSize,
@@ -45,7 +42,10 @@ int main(int argc, char** argv) {
         kCliffPenalty,
         kMaxSteps);
     const string extra_info =
-        "grid_size=4, max_steps=40, slip_prob=0.4, wind_prob=0.7";
+        "grid_size=" + to_string(kGridSize)
+        + ", max_steps=" + to_string(kMaxSteps)
+        + ", slip_prob=" + to_string(kSlipProb)
+        + ", wind_prob=" + to_string(kWindProb);
     const auto catastrophe_fn = [env_ptr = env](shared_ptr<const mcts::State> state) {
         return env_ptr->is_catastrophic_state(
             static_pointer_cast<const mcts::Int3TupleState>(state));

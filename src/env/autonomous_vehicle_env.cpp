@@ -112,7 +112,7 @@ namespace mcts::exp {
     }
 
     array<double, 2> AutonomousVehicleEnv::default_edge_probs() {
-        return {0.4, 0.5};
+        return {0.4, 0.6};
     }
 
     int AutonomousVehicleEnv::encode_time_outcome(int time, int outcome) const {

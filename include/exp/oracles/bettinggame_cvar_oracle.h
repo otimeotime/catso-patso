@@ -22,12 +22,16 @@ namespace mcts::exp::oracles {
 
             std::shared_ptr<const mcts::exp::BettingGameEnv> env;
             double tau;
+            double discount_gamma;
             std::unordered_map<StateKey, OptimalDistributionSolution, StateKeyHash> memo;
 
             static StateKey make_key(std::shared_ptr<const mcts::exp::BettingGameState> state);
 
         public:
-            BettingGameCvarOracle(std::shared_ptr<const mcts::exp::BettingGameEnv> env, double tau);
+            BettingGameCvarOracle(
+                std::shared_ptr<const mcts::exp::BettingGameEnv> env,
+                double tau,
+                double discount_gamma = 1.0);
 
             const OptimalDistributionSolution& solve_state(
                 std::shared_ptr<const mcts::exp::BettingGameState> state);

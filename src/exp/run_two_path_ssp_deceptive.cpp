@@ -22,10 +22,7 @@ int main(int argc, char** argv) {
     constexpr double kPowerMeanExponent = 1.0;
     constexpr int kPatsoParticles = 64;
 
-    vector<int> trial_counts;
-    for (int i = 1; i <= 20; ++i) {
-        trial_counts.push_back(i * 1000);
-    }
+    vector<int> trial_counts = {10000, 20000, 30000};
 
     auto env = make_shared<mcts::exp::TwoPathSspDeceptiveEnv>();
     const string extra_info = "safe_length=6, risky_length=2, max_steps=100, hazard_prob=0.08";

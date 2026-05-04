@@ -23,7 +23,8 @@ No Python venv is required for running the C++ experiments; only for the plotter
 | `src/catso/` | CATSO + PATSO implementation |
 | `include/env/` , `src/env/` | All environment implementations (`betting_game_env`, `guarded_maze_env`, …) |
 | `src/exp/run_<env>.cpp` | One main() per environment — runs UCT + CATSO + PATSO and writes CSVs |
-| `src/exp/tune_<env>.cpp` | Grid-search tuner — currently only `tune_bettinggame` is wired to CATSO/PATSO |
+| `src/exp/run_experiment.cpp` / `src/exp/tune_experiment.cpp` | Generic experiment entrypoints, driven by the env registry |
+| `src/exp/tune_<env>.cpp` | Older per-env tuners kept for reference; `mcts-tune --env <name>` is the primary path now |
 | `include/exp/discrete_runner_common.h` | Shared template the boilerplate runners delegate to |
 | `plot.py` | CLI plotter — reads a `results_<env>_summary.csv` and emits 5 PDF plots into `plots/` |
 | `plot.ipynb` | Notebook equivalent of `plot.py` (for interactive use) |
@@ -33,24 +34,24 @@ No Python venv is required for running the C++ experiments; only for the plotter
 
 ## 3. Environments wired to CATSO/PATSO
 
-All 12 envs below build and run UCT + CATSO + PATSO. Three of them have bespoke runners; the other nine go through the shared template in `discrete_runner_common.h`.
+All 12 envs below are available through the generic `mcts-run --env <name>` and `mcts-tune --env <name>` entrypoints. The dedicated `mcts-run-<env>` binaries remain available for comparison with the older workflow.
 
-| Env | Make target | Runner type | τ (CVaR α) | runs |
-|---|---|---|---|---|
-| Betting Game | `mcts-run-bettinggame` | bespoke | 0.25 | 100 |
-| Risky Shortcut Gridworld | `mcts-run-risky-shortcut-gridworld` | bespoke | 0.05 | 3 |
-| Autonomous Vehicle | `mcts-run-autonomous-vehicle` | bespoke | 0.05 | 3 |
-| Guarded Maze | `mcts-run-guarded-maze` | template | 0.05 | 10 |
-| Gambler Jackpot | `mcts-run-gambler-jackpot` | template | 0.10 | 3 |
-| Laser Tag Safe Grid | `mcts-run-laser-tag-safe-grid` | template | 0.05 | 3 |
-| Overflow Queue | `mcts-run-overflow-queue` | template | 0.05 | 3 |
-| Risky Ladder | `mcts-run-risky-ladder` | template | 0.05 | 3 |
-| River Swim Stochastic | `mcts-run-river-swim-stochastic` | template | 0.10 | 3 |
-| Thin Ice Frozen Lake Plus | `mcts-run-thin-ice-frozen-lake-plus` | template | 0.05 | 3 |
-| Two-level Risky Treasure | `mcts-run-two-level-risky-treasure` | template | 0.05 | 3 |
-| Two-Path SSP Deceptive | `mcts-run-two-path-ssp-deceptive` | template | 0.05 | 3 |
+| Env | `--env` value | τ (CVaR α) | runs |
+|---|---|---|---|
+| Autonomous Vehicle | `autonomous_vehicle` | 0.10 | 3 |
+| Betting Game | `bettinggame` | 0.20 | 3 |
+| Gambler Jackpot | `gambler_jackpot` | 0.10 | 3 |
+| Guarded Maze | `guarded_maze` | 0.10 | 3 |
+| Laser Tag Safe Grid | `laser_tag_safe_grid` | 0.05 | 3 |
+| Overflow Queue | `overflow_queue` | 0.05 | 3 |
+| Risky Ladder | `risky_ladder` | 0.05 | 3 |
+| Risky Shortcut Gridworld | `risky_shortcut_gridworld` | 0.05 | 1 |
+| River Swim Stochastic | `river_swim_stochastic` | 0.10 | 3 |
+| Thin Ice Frozen Lake Plus | `thin_ice_frozen_lake_plus` | 0.05 | 3 |
+| Two-level Risky Treasure | `two_level_risky_treasure` | 0.05 | 10 |
+| Two-Path SSP Deceptive | `two_path_ssp_deceptive` | 0.05 | 3 |
 
-Tuners exist only for `mcts-tune-bettinggame` (CATSO/PATSO grid). The rest are intentionally untuned — see §6 for how to add one.
+Every env in the table above is now wired into the generic tuner via `mcts-tune --env <name>`.
 
 ---
 
@@ -59,11 +60,11 @@ Tuners exist only for `mcts-tune-bettinggame` (CATSO/PATSO grid). The rest are i
 The fastest path from clean checkout to plots:
 
 ```bash
-# 1) Build the experiment binary (~1 min, builds the whole tree once)
-make mcts-run-bettinggame
+# 1) Build the generic runner (~1 min, builds the whole tree once)
+make mcts-run
 
-# 2) Run the experiment (this is the long step — typically hours for full sweeps)
-./mcts-run-bettinggame
+# 2) Run one environment (this is the long step — typically hours for full sweeps)
+./mcts-run --env bettinggame
 
 # 3) Plot — one command, writes 5 PDFs into plots/
 source .venv/bin/activate
@@ -82,15 +83,15 @@ Outputs land in the repo root:
 ### 5.1. Build
 
 ```bash
-make mcts-run-<env>
+make mcts-run
 ```
 
-Replace `<env>` with one of the targets in §3. The first build compiles all common objects + every env (~1–2 min); subsequent builds only re-link.
+Use `./mcts-run --env <env_name>` for the generic path. The dedicated `mcts-run-<env>` binaries still work, but they are no longer required for the 12 experiment envs listed in §3. The first build compiles all common objects + every env (~1–2 min); subsequent builds only re-link.
 
 To rebuild after touching CATSO/PATSO code:
 
 ```bash
-make clean && make mcts-run-<env>
+make clean && make mcts-run
 ```
 
 `make clean` deletes everything under `bin/` and removes all `mcts-run-*` / `mcts-tune-*` binaries.
@@ -98,53 +99,46 @@ make clean && make mcts-run-<env>
 ### 5.2. Run an experiment
 
 ```bash
-./mcts-run-<env>
+./mcts-run --env <env_name>
 ```
 
 The runner prints:
 - environment metadata (horizon, win_prob, reward bounds, …)
-- the CVaR oracle's optimal CVaR at the root
 - one line per (algorithm × run) showing progress
 
 Behaviour:
 - Each run plans from the initial state with a growing simulation budget (typically `1k, 2k, …, 100k`), and at every budget snapshot evaluates the tree by Monte-Carlo rollouts.
 - Per-run seeds are deterministic (`base_seed + 1000·run + hash(algo)`), so reruns are reproducible.
-- Multithreading: 8 worker threads inside `MctsPool` (hardcoded as `kThreads`).
+- Multithreading comes from the registered env spec (`threads`), typically 4 or 8 depending on the environment.
 
 CLI flags:
-- `mcts-run-bettinggame` and `mcts-tune-bettinggame` accept `--optimal-action-regret-threshold <ε>`. Useful for relaxing the "optimal action hit" criterion when there are near-ties at the root (default = 0).
-- All other runners ignore command-line arguments — config lives as `constexpr int / double` constants at the top of each `run_<env>.cpp`.
+- `mcts-run` accepts `--env <env_name>`.
+- `mcts-tune` accepts `--env <env_name>`.
+- The dedicated `mcts-run-<env>` binaries still read their config from the `constexpr` values in `src/exp/run_<env>.cpp`.
 
-To change settings in those runners (for example horizon, runs, trial budget), edit the constants and rebuild:
+To change settings in the generic path (for example horizon, runs, or trial budgets), edit the registered env spec and rebuild:
 
 ```cpp
-// e.g. src/exp/run_guarded_maze.cpp
-constexpr int kMaxSteps = 500;
-constexpr double kCvarTau = 0.05;
-constexpr int kEvalRollouts = 200;
-constexpr int kRuns = 10;
-constexpr int kThreads = 8;
-constexpr int kBaseSeed = 4242;
-constexpr int kCatsoAtoms = 51;       // CATSO N
-constexpr double kOptimism = 1.0;     // C in the polynomial bonus
-constexpr double kPowerMeanExponent = 2.0;   // p in V-node power mean
-constexpr int kPatsoParticles = 64;   // PATSO K
+// e.g. src/exp/env_specs/additional_env_specs.cpp
+spec.horizon = 50;
+spec.eval_rollouts = 50;
+spec.runs = 3;
+spec.threads = 8;
+spec.trial_counts = {1000, 2000, 10000, 20000};
 ```
 
 ### 5.3. Tune hyperparameters
 
-Currently only Betting Game has a tuner.
-
 ```bash
-make mcts-tune-bettinggame
-./mcts-tune-bettinggame
+make mcts-tune
+./mcts-tune --env bettinggame
 ```
 
 The tuner sweeps:
 - CATSO: `n_atoms ∈ {25, 51, 100}`, `optimism ∈ {2, 4, 8}`, `p ∈ {1, 2, 4}`, `τ ∈ {0.05, 0.1, 0.2, 0.25}`
 - PATSO: `max_particles ∈ {32, 64, 128}`, same `optimism × p × τ` grid
 
-Output: `tune_bettinggame.csv` (one row per (algorithm, config, τ, run, trial)). Pick the best config by sorting on `cvar_regret` or `optimal_action_prob` for your target τ:
+Output: `tune_<env>.csv` (one row per (algorithm, config, τ, run, trial)). Pick the best config by sorting on `cvar_regret` or `optimal_action_prob` for your target τ:
 
 ```bash
 # example: sort CATSO @ 100k trials, τ=0.25, by mean cvar_regret
@@ -152,11 +146,7 @@ awk -F, 'NR==1 || ($2=="CATSO" && $4==0.25 && $6==100000)' tune_bettinggame.csv 
   | sort -t, -k9,9g | head
 ```
 
-Once you've picked a config, copy it into `src/exp/run_bettinggame.cpp` (`build_candidates`).
-
-#### Adding a tuner for another env
-
-There is no shared tuner template — you'd clone `src/exp/tune_bettinggame.cpp`, swap the env type and oracle, and add Makefile entries (`TUNE_<ENV>_SOURCES`, the link rule, and a target alias). For the boilerplate envs you'd also need a typed oracle solver — `discrete_runner_common.h::CvarOracle` already provides one, so you mostly need to wrap the candidate-builder loop in the same shape as `tune_bettinggame.cpp:415-465`.
+Once you've picked a config, copy it into the corresponding env spec or dedicated runner if you want to make it the default.
 
 ### 5.4. Plot
 
@@ -233,8 +223,8 @@ After a full run from a clean repo:
 
 ```
 catso-patso/
-├── mcts-run-<env>                       # built binary
-├── mcts-tune-<env>                      # if applicable
+├── mcts-run                             # generic runner
+├── mcts-tune                            # generic tuner
 ├── results_<env>.csv                    # per-trial, per-run rows
 ├── results_<env>_summary.csv            # averaged over `runs` — feeds plot.ipynb
 ├── tune_<env>.csv                       # per-config rows from tuner
@@ -251,9 +241,9 @@ catso-patso/
 
 A few practical tips:
 
-- **In parallel across envs:** the runners themselves multithread (8 threads) but bind to one process; running two `./mcts-run-<env>` in parallel just oversubscribes cores. On an 8-core box, run them sequentially. On 16+ cores, you can run two at once.
-- **Long runs in the background:** use `nohup ./mcts-run-bettinggame > log_betting.txt 2>&1 &`, then `tail -f log_betting.txt` to monitor. The runners log a "<algo> run X/N done" line per run completion, so progress is easy to track.
-- **Smoke-test first:** before committing to a full sweep, edit the runner's `kRuns` to `1` and `trial_counts` to `{1000, 5000}`, rebuild, run for a minute. Confirms everything links + writes valid CSV before you spend hours.
+- **In parallel across envs:** the runners themselves multithread and usually use 4 or 8 threads; running two `./mcts-run --env ...` jobs in parallel can easily oversubscribe cores. On an 8-core box, run them sequentially. On 16+ cores, you can run two at once.
+- **Long runs in the background:** use `nohup ./mcts-run --env bettinggame > log_betting.txt 2>&1 &`, then `tail -f log_betting.txt` to monitor. The runners log a "<algo> run X/N done" line per run completion, so progress is easy to track.
+- **Smoke-test first:** before committing to a full sweep, shrink the registered env spec's `runs` and `trial_counts`, rebuild, and run for a minute. Confirms everything links + writes valid CSV before you spend hours.
 - **Reproducibility:** `kBaseSeed` (default 4242) is the only randomness source. Same seed + same code + same hardware threading → same results. If you compare runs across code changes, keep the seed fixed.
 
 ---
@@ -261,7 +251,7 @@ A few practical tips:
 ## 9. Common gotchas
 
 - **`results_<env>.csv` overwrite:** the runner truncates the file every time. If you want to keep a previous result, rename or move it before running again.
-- **Build-time vs run-time config:** there are no env vars or config files for hyperparameters. Everything is compiled in. After editing constants in `run_<env>.cpp`, you must rebuild.
+- **Build-time vs run-time config:** there are no env vars or config files for hyperparameters. Everything is compiled in. After editing an env spec or dedicated runner, you must rebuild.
 - **Killing a running experiment:** `Ctrl+C` is safe; the partial CSV is whatever was flushed before the kill. Buffering means the most recent few lines may be missing.
 - **`mc_cvar_stddev`:** `plot.py` handles its absence gracefully. The notebook does not — see §5.4.
 - **`mc_eval` falls back to random off-tree:** if the post-tree evaluation rollout reaches a state not present in the searched tree (because the budget was small or the env is highly stochastic), `EvalPolicy` switches to uniform random. With `eval_rollouts = 200`, low budgets can therefore look noisier than the underlying planner is — increase the budget, not the eval count, if curves look jagged at low trial counts.
@@ -273,8 +263,7 @@ A few practical tips:
 Step by step:
 
 1. **Implement the env** — subclass `MctsEnv` in `include/env/<name>_env.h` and `src/env/<name>_env.cpp`. Mirror an existing one (`betting_game_env` is a good small reference).
-2. **Add the runner** — clone `src/exp/run_guarded_maze.cpp` (8 lines of config + a delegation to `mcts::exp::runner::run_experiment`) and adjust the env type, state type, catastrophe predicate, and constants.
-3. **Hook up Make** — in `Makefile`, add three blocks: `RUN_<NAME>_SOURCES`/`RUN_<NAME>_OBJECTS` near line 80, `TARGET_MCTS_RUN_<NAME>` in the targets list around line 160, and the link rule near line 440.
-4. **Build + smoke-test** as in §8 with `kRuns=1`.
-5. **Plot** — `python3 plot.py results_<name>_summary.csv` after activating the venv. Works as long as the runner emits the standard column set (the boilerplate template already does).
-6. **Tune (optional)** — clone `tune_bettinggame.cpp`, scope the env oracle, sweep on a smaller (k, n) before committing to a full grid.
+2. **Add the env spec** — register a `make_<name>_spec()` factory under `src/exp/env_specs/`, set `make_env`, `trial_counts`, default hyperparameters, and any catastrophe/root-metric callbacks.
+3. **Register it** — add the factory to [register_all_envs.cpp](/home/sonlh/trung/catso-patso/src/exp/register_all_envs.cpp:17) so `mcts-run --env <name>` and `mcts-tune --env <name>` can discover it.
+4. **Build + smoke-test** as in §8 with a reduced spec (`runs=1`, tiny `trial_counts`).
+5. **Plot** — `python3 plot.py results_<name>_summary.csv` after activating the venv.

@@ -5,21 +5,11 @@
 #include <array>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 
 using namespace std;
 
 namespace {
-    constexpr array<array<int, mcts::exp::GuardedMazeEnv::num_cols>, mcts::exp::GuardedMazeEnv::num_rows> kMazeMap{{
-        {{-1, -1, -1, -1, -1, -1, -1, -1}},
-        {{-1,  0,  0,  0,  0,  0,  0, -1}},
-        {{-1,  0, -1, -1, -1, -1,  0, -1}},
-        {{-1,  0,  0,  0,  0, -1,  0, -1}},
-        {{-1,  0,  0,  0,  0, -1,  0, -1}},
-        {{-1,  0,  0,  0,  0, -1,  0, -1}},
-        {{-1,  0,  0,  0,  0,  0,  0, -1}},
-        {{-1, -1, -1, -1, -1, -1, -1, -1}}
-    }};
-
     constexpr array<array<int, 2>, mcts::exp::GuardedMazeEnv::num_actions> kActionDeltas{{
         {{0, 1}},
         {{1, 0}},
@@ -36,7 +26,21 @@ namespace {
 }
 
 namespace mcts::exp {
+    GuardedMazeEnv::MazeLayout GuardedMazeEnv::default_maze_layout() {
+        return {
+            "########",
+            "#......#",
+            "#.####.#",
+            "#....#.#",
+            "#....#.#",
+            "#....#.#",
+            "#......#",
+            "########"
+        };
+    }
+
     GuardedMazeEnv::GuardedMazeEnv(
+        MazeLayout maze_layout,
         array<int, 2> start,
         array<int, 2> goal,
         array<int, 2> guard,
@@ -44,6 +48,9 @@ namespace mcts::exp {
         int deduction_limit,
         double reward_normalisation)
         : mcts::MctsEnv(true),
+          maze_layout(std::move(maze_layout)),
+          num_rows(static_cast<int>(this->maze_layout.size())),
+          num_cols(this->maze_layout.empty() ? 0 : static_cast<int>(this->maze_layout.front().size())),
           start(start),
           goal(goal),
           guard(guard),
@@ -51,11 +58,23 @@ namespace mcts::exp {
           deduction_limit(deduction_limit),
           reward_normalisation(reward_normalisation)
     {
+        if (this->maze_layout.empty()) {
+            throw runtime_error("GuardedMazeEnv: maze_layout must have at least one row");
+        }
+        if (this->num_cols <= 0) {
+            throw runtime_error("GuardedMazeEnv: maze_layout rows must be non-empty");
+        }
+        for (const auto& row : this->maze_layout) {
+            if (static_cast<int>(row.size()) != this->num_cols) {
+                throw runtime_error("GuardedMazeEnv: maze_layout must be rectangular");
+            }
+        }
+
         const auto validate_open_cell = [&](const array<int, 2>& cell, const string& name) {
             if (cell[0] < 0 || cell[0] >= num_rows || cell[1] < 0 || cell[1] >= num_cols) {
                 throw runtime_error("GuardedMazeEnv: " + name + " is out of bounds");
             }
-            if (kMazeMap[cell[0]][cell[1]] == -1) {
+            if (this->maze_layout[static_cast<size_t>(cell[0])][static_cast<size_t>(cell[1])] == '#') {
                 throw runtime_error("GuardedMazeEnv: " + name + " must be on a free cell");
             }
         };
@@ -76,7 +95,11 @@ namespace mcts::exp {
     }
 
     bool GuardedMazeEnv::is_wall(int row, int col) const {
-        return row < 0 || row >= num_rows || col < 0 || col >= num_cols || kMazeMap[row][col] == -1;
+        return row < 0
+            || row >= num_rows
+            || col < 0
+            || col >= num_cols
+            || maze_layout[static_cast<size_t>(row)][static_cast<size_t>(col)] == '#';
     }
 
     bool GuardedMazeEnv::is_goal_cell(int row, int col) const {

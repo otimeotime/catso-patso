@@ -39,6 +39,7 @@ namespace mcts::exp {
                 int& row,
                 int& col,
                 int& time) const;
+            bool is_action_valid(int row, int col, int action) const;
             std::pair<int, int> clip(int row, int col) const;
             std::pair<int, int> apply_action_deterministic(int row, int col, int action) const;
             bool is_windy_col(int col) const;
@@ -52,7 +53,7 @@ namespace mcts::exp {
                 double step_cost = default_step_cost,
                 double goal_reward = default_goal_reward,
                 double cliff_penalty = default_cliff_penalty,
-                int max_steps = -1);
+                int max_steps = 20);
             virtual ~RiskyShortcutGridworldEnv() = default;
 
             // Typed API
@@ -96,6 +97,7 @@ namespace mcts::exp {
             int get_max_steps() const { return max_steps; }
             double get_slip_prob() const { return slip_prob; }
             double get_wind_prob() const { return wind_prob; }
+            std::vector<int> get_windy_cols() const;
             double get_step_cost() const { return step_cost; }
             double get_goal_reward() const { return goal_reward; }
             double get_cliff_penalty() const { return cliff_penalty; }

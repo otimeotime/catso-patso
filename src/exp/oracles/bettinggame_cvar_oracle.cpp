@@ -11,10 +11,11 @@ namespace mcts::exp::oracles {
             ReturnDistribution& out,
             const ReturnDistribution& in,
             double weight,
-            double shift)
+            double shift,
+            double scale = 1.0)
         {
             for (const auto& [value, probability] : in) {
-                out[value + shift] += weight * probability;
+                out[scale * value + shift] += weight * probability;
             }
         }
     }
@@ -33,9 +34,11 @@ namespace mcts::exp::oracles {
 
     BettingGameCvarOracle::BettingGameCvarOracle(
         std::shared_ptr<const mcts::exp::BettingGameEnv> env,
-        double tau)
+        double tau,
+        double discount_gamma)
         : env(std::move(env)),
-          tau(tau)
+          tau(tau),
+          discount_gamma(discount_gamma)
     {
     }
 
@@ -68,7 +71,8 @@ namespace mcts::exp::oracles {
                     action_distribution,
                     child_solution.state_value_distribution,
                     probability,
-                    local_reward);
+                    local_reward,
+                    discount_gamma);
             }
 
             const int action_id = action->action;

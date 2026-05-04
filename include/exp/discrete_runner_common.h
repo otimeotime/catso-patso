@@ -219,6 +219,7 @@ namespace mcts::exp::runner {
         private:
             std::shared_ptr<const EnvT> env;
             double tau;
+            double discount_gamma;
             std::map<StateKey<StateT>, OptimalDistributionSolution> memo;
 
             static StateKey<StateT> make_key(std::shared_ptr<const StateT> state) {
@@ -229,15 +230,19 @@ namespace mcts::exp::runner {
                 ReturnDistribution& out,
                 const ReturnDistribution& in,
                 double weight,
-                double shift)
+                double shift,
+                double scale = 1.0)
             {
                 for (const auto& [value, probability] : in) {
-                    out[value + shift] += weight * probability;
+                    out[scale * value + shift] += weight * probability;
                 }
             }
 
         public:
-            CvarOracle(std::shared_ptr<const EnvT> env, double tau) : env(std::move(env)), tau(tau) {}
+            CvarOracle(std::shared_ptr<const EnvT> env, double tau, double discount_gamma = 1.0) :
+                env(std::move(env)),
+                tau(tau),
+                discount_gamma(discount_gamma) {}
 
             const OptimalDistributionSolution& solve_state(std::shared_ptr<const StateT> state) {
                 const StateKey<StateT> key = make_key(state);
@@ -265,7 +270,8 @@ namespace mcts::exp::runner {
                             action_distribution,
                             child_solution.state_value_distribution,
                             probability,
-                            local_reward);
+                            local_reward,
+                            discount_gamma);
                     }
 
                     const int action_id = action->action;
@@ -424,7 +430,7 @@ namespace mcts::exp::runner {
             }
 
             if (found_action_cvar) {
-                metrics.cvar_regret = root_solution.optimal_cvar - max_root_action_cvar;
+                metrics.cvar_regret = std::abs(root_solution.optimal_cvar - max_root_action_cvar);
             }
         }
 
@@ -438,7 +444,8 @@ namespace mcts::exp::runner {
         double power_mean_exponent = 1.0,
         int patso_particles = 100,
         double patso_optimism = 4.0,
-        double uct_epsilon = 0.1)
+        double uct_epsilon = 0.1,
+        double discount_gamma = mcts::CatsoManagerArgs::discount_gamma_default)
     {
         std::vector<Candidate> cands;
 
@@ -459,7 +466,8 @@ namespace mcts::exp::runner {
         cands.push_back({"CATSO", "n_atoms=" + std::to_string(catso_n_atoms)
                 + ",optimism=" + std::to_string(optimism)
                 + ",p=" + std::to_string(power_mean_exponent)
-                + ",tau=" + std::to_string(cvar_tau),
+                + ",tau=" + std::to_string(cvar_tau)
+                + ",gamma=" + std::to_string(discount_gamma),
             [=](auto env, auto init_state, int max_depth, int seed) {
                 mcts::CatsoManagerArgs args(env);
                 args.max_depth = max_depth;
@@ -468,6 +476,7 @@ namespace mcts::exp::runner {
                 args.optimism_constant = optimism;
                 args.power_mean_exponent = power_mean_exponent;
                 args.cvar_tau = cvar_tau;
+                args.discount_gamma = discount_gamma;
                 args.seed = seed;
                 auto mgr = std::make_shared<mcts::CatsoManager>(args);
                 auto root = std::make_shared<mcts::CatsoDNode>(mgr, init_state, 0, 0);
@@ -479,7 +488,8 @@ namespace mcts::exp::runner {
         cands.push_back({"PATSO", "max_particles=" + std::to_string(patso_particles)
                 + ",optimism=" + std::to_string(patso_optimism)
                 + ",p=" + std::to_string(power_mean_exponent)
-                + ",tau=" + std::to_string(cvar_tau),
+                + ",tau=" + std::to_string(cvar_tau)
+                + ",gamma=" + std::to_string(discount_gamma),
             [=](auto env, auto init_state, int max_depth, int seed) {
                 mcts::PatsoManagerArgs args(env);
                 args.max_depth = max_depth;
@@ -488,6 +498,7 @@ namespace mcts::exp::runner {
                 args.optimism_constant = patso_optimism;
                 args.power_mean_exponent = power_mean_exponent;
                 args.cvar_tau = cvar_tau;
+                args.discount_gamma = discount_gamma;
                 args.seed = seed;
                 auto mgr = std::make_shared<mcts::PatsoManager>(args);
                 auto root = std::make_shared<mcts::PatsoDNode>(mgr, init_state, 0, 0);
@@ -545,7 +556,8 @@ namespace mcts::exp::runner {
         double power_mean_exponent = 1.0,
         int patso_particles = 100,
         double patso_optimism = 4.0,
-        double uct_epsilon = 0.1)
+        double uct_epsilon = 0.1,
+        double discount_gamma = mcts::CatsoManagerArgs::discount_gamma_default)
     {
         const std::shared_ptr<const EnvT> const_env = env;
         std::shared_ptr<const StateT> typed_init_state = env->get_initial_state();
@@ -557,8 +569,9 @@ namespace mcts::exp::runner {
             power_mean_exponent,
             patso_particles,
             patso_optimism,
-            uct_epsilon);
-        CvarOracle<EnvT, StateT> oracle(const_env, cvar_tau);
+            uct_epsilon,
+            discount_gamma);
+        CvarOracle<EnvT, StateT> oracle(const_env, cvar_tau, discount_gamma);
         const auto& root_solution = oracle.solve_state(typed_init_state);
         std::map<std::pair<std::string, int>, SummaryAccumulator> summary_by_algo_and_trial;
 
@@ -570,7 +583,9 @@ namespace mcts::exp::runner {
         if (!extra_info.empty()) {
             std::cout << ", " << extra_info;
         }
-        std::cout << ", cvar_tau=" << cvar_tau << ", horizon=" << horizon << "\n";
+        std::cout << ", cvar_tau=" << cvar_tau
+                  << ", gamma=" << discount_gamma
+                  << ", horizon=" << horizon << "\n";
         std::cout << "  Algorithms: " << candidates.size()
                   << ", Runs: " << runs
                   << ", Trial counts: " << trial_counts.size()
@@ -693,7 +708,8 @@ namespace mcts::exp::runner {
         double power_mean_exponent = 1.0,
         int patso_particles = 100,
         double patso_optimism = 4.0,
-        double uct_epsilon = 0.1)
+        double uct_epsilon = 0.1,
+        double discount_gamma = mcts::CatsoManagerArgs::discount_gamma_default)
     {
         const std::shared_ptr<const EnvT> const_env = env;
         std::shared_ptr<const mcts::State> init_state = env->get_initial_state_itfc();
@@ -704,7 +720,8 @@ namespace mcts::exp::runner {
             power_mean_exponent,
             patso_particles,
             patso_optimism,
-            uct_epsilon);
+            uct_epsilon,
+            discount_gamma);
         std::map<std::pair<std::string, int>, SimpleSummaryAccumulator> summary_by_algo_and_trial;
 
         std::ofstream out(results_csv, std::ios::out | std::ios::trunc);
@@ -715,7 +732,9 @@ namespace mcts::exp::runner {
         if (!extra_info.empty()) {
             std::cout << ", " << extra_info;
         }
-        std::cout << ", cvar_tau=" << cvar_tau << ", horizon=" << horizon << "\n";
+        std::cout << ", cvar_tau=" << cvar_tau
+                  << ", gamma=" << discount_gamma
+                  << ", horizon=" << horizon << "\n";
         std::cout << "  Algorithms: " << candidates.size()
                   << ", Runs: " << runs
                   << ", Trial counts: " << trial_counts.size()

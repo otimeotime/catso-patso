@@ -14,7 +14,7 @@ int main(int argc, char** argv) {
     constexpr int kMaxSteps = 2;
     constexpr double kCvarTau = 0.05;
     constexpr int kEvalRollouts = 200;
-    constexpr int kRuns = 3;
+    constexpr int kRuns = 10;
     constexpr int kThreads = 8;
     constexpr int kBaseSeed = 4242;
     constexpr int kCatsoAtoms = 51;
@@ -22,13 +22,10 @@ int main(int argc, char** argv) {
     constexpr double kPowerMeanExponent = 1.0;
     constexpr int kPatsoParticles = 64;
 
-    vector<int> trial_counts;
-    for (int i = 1; i <= 20; ++i) {
-        trial_counts.push_back(i * 1000);
-    }
+    vector<int> trial_counts = {10000, 20000, 30000};
 
     auto env = make_shared<mcts::exp::TwoLevelRiskyTreasureEnv>();
-    const string extra_info = "stages=2, prior_success_prob=0.15, hint_error=0.2";
+    const string extra_info = "stages=2, prior_success_prob=0.4, hint_error=0.3";
     const auto catastrophe_fn = [](shared_ptr<const mcts::State> state) {
         const auto typed_state = static_pointer_cast<const mcts::Int4TupleState>(state);
         return get<3>(typed_state->state) == mcts::exp::TwoLevelRiskyTreasureEnv::fail_status;

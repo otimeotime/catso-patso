@@ -45,11 +45,11 @@ namespace mcts::exp {
 
         public:
             TwoLevelRiskyTreasureEnv(
-                double safe_reward = 5.0,
-                double success_reward = 50.0,
-                double fail_penalty = 20.0,
-                double prior_success_prob = 0.15,
-                double hint_error = 0.20,
+                double safe_reward = 2.0,
+                double success_reward = 500.0,
+                double fail_penalty = 10.0,
+                double prior_success_prob = 0.40,
+                double hint_error = 0.30,
                 double abort_penalty = 1.0);
             virtual ~TwoLevelRiskyTreasureEnv() = default;
 

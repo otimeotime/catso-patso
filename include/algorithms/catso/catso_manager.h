@@ -8,6 +8,7 @@ namespace mcts {
         static constexpr double optimism_constant_default = 1.0;
         static constexpr double power_mean_exponent_default = 1.0;
         static constexpr double cvar_tau_default = 1.0;
+        static constexpr double discount_gamma_default = 0.95;
         // Sentinel: 0.0 means "follow cvar_tau" (paper default α = τ in F9).
         static constexpr double recommend_alpha_default = 0.0;
 
@@ -15,6 +16,7 @@ namespace mcts {
         double optimism_constant;
         double power_mean_exponent;
         double cvar_tau;
+        double discount_gamma;
         double recommend_alpha;
 
         CatsoManagerArgs(std::shared_ptr<MctsEnv> mcts_env) :
@@ -23,6 +25,7 @@ namespace mcts {
             optimism_constant(optimism_constant_default),
             power_mean_exponent(power_mean_exponent_default),
             cvar_tau(cvar_tau_default),
+            discount_gamma(discount_gamma_default),
             recommend_alpha(recommend_alpha_default) {}
 
         virtual ~CatsoManagerArgs() = default;
@@ -39,6 +42,7 @@ namespace mcts {
             double optimism_constant;
             double power_mean_exponent;
             double cvar_tau;
+            double discount_gamma;
             double recommend_alpha;
 
             CatsoManager(const CatsoManagerArgs& args) :
@@ -47,6 +51,7 @@ namespace mcts {
                 optimism_constant(args.optimism_constant),
                 power_mean_exponent(args.power_mean_exponent),
                 cvar_tau(clamp_level(args.cvar_tau)),
+                discount_gamma(args.discount_gamma),
                 recommend_alpha(args.recommend_alpha <= 0.0
                     ? clamp_level(args.cvar_tau)
                     : clamp_level(args.recommend_alpha)) {}

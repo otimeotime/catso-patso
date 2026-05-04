@@ -61,7 +61,8 @@ namespace mcts::exp {
             ss << "max_particles=" << patso->max_particles
                << ",optimism=" << format_manager_double(patso->optimism_constant)
                << ",p=" << format_manager_double(patso->power_mean_exponent)
-               << ",cvar_tau=" << format_manager_double(patso->cvar_tau);
+               << ",cvar_tau=" << format_manager_double(patso->cvar_tau)
+               << ",gamma=" << format_manager_double(patso->discount_gamma);
             return ss.str();
         }
 
@@ -70,7 +71,8 @@ namespace mcts::exp {
             ss << "n_atoms=" << catso->n_atoms
                << ",optimism=" << format_manager_double(catso->optimism_constant)
                << ",p=" << format_manager_double(catso->power_mean_exponent)
-               << ",cvar_tau=" << format_manager_double(catso->cvar_tau);
+               << ",cvar_tau=" << format_manager_double(catso->cvar_tau)
+               << ",gamma=" << format_manager_double(catso->discount_gamma);
             return ss.str();
         }
 

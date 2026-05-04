@@ -29,6 +29,7 @@ namespace mcts::exp {
         int threads = 1;
         int base_seed = 4242;
         double cvar_tau = 0.25;
+        double discount_gamma = 1.0;
 
         std::vector<int> trial_counts;
 
@@ -50,7 +51,8 @@ namespace mcts::exp {
         std::function<RootMetrics(
             std::shared_ptr<const mcts::MctsEnv> env,
             std::shared_ptr<const mcts::MctsDNode> root,
-            double eval_tau
+            double eval_tau,
+            double discount_gamma
         )> evaluate_root_metrics;
 
         std::function<void(std::ostream&)> print_env_info;

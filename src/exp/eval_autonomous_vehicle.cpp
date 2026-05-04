@@ -32,6 +32,7 @@ int main(int argc, char** argv) {
 
     cerr << "[eval-autonomous-vehicle] algo=" << args.algo
          << ", cvar_tau=" << args.cvar_tau
+         << ", gamma=" << args.discount_gamma
          << ", trial_budget=" << args.trial_budget
          << ", num_seeds=" << args.num_seeds
          << ", eval_rollouts=" << args.eval_rollouts
@@ -40,7 +41,9 @@ int main(int argc, char** argv) {
          << "\n";
 
     mcts::exp::runner::CvarOracle<mcts::exp::AutonomousVehicleEnv, mcts::Int3TupleState> oracle(
-        static_pointer_cast<const mcts::exp::AutonomousVehicleEnv>(env), args.cvar_tau);
+        static_pointer_cast<const mcts::exp::AutonomousVehicleEnv>(env),
+        args.cvar_tau,
+        args.discount_gamma);
     const auto& root_solution = oracle.solve_state(env->get_initial_state());
     cerr << "[eval-autonomous-vehicle] root_optimal_cvar=" << root_solution.optimal_cvar << "\n";
 
