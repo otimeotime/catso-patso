@@ -79,7 +79,7 @@ namespace mcts::exp {
         shared_ptr<const BettingGameState> state,
         shared_ptr<const mcts::IntAction> action) const
     {
-        if (action->action < 0 || action->action >= num_actions) {
+        if (action->action < min_action_id || action->action >= num_actions) {
             throw runtime_error("BettingGameEnv: action out of range");
         }
 
@@ -111,7 +111,7 @@ namespace mcts::exp {
             return actions;
         }
 
-        for (int action = 0; action < num_actions; ++action) {
+        for (int action = min_action_id; action < num_actions; ++action) {
             actions->push_back(make_shared<const mcts::IntAction>(action));
         }
         return actions;

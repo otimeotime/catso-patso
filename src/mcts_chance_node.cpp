@@ -152,6 +152,10 @@ namespace mcts {
         return children.size();
     }
 
+    int MctsCNode::get_num_visits() const {
+        return num_visits;
+    }
+
     /**
      * Has child if it's in the children map. Find returns an iterator pointing at the element found, or the 'end' 
      * iterator if it is not in the map. So if the returned iterator == children.end() then a child doesn't exist for 
@@ -167,6 +171,15 @@ namespace mcts {
      */
     shared_ptr<MctsDNode> MctsCNode::get_child_node_itfc(shared_ptr<const Observation> observation) const {
         return children.at(observation);
+    }
+
+    vector<shared_ptr<const Observation>> MctsCNode::get_child_observations_itfc() const {
+        vector<shared_ptr<const Observation>> observations;
+        observations.reserve(children.size());
+        for (const auto& observation_child_pair : children) {
+            observations.push_back(observation_child_pair.first);
+        }
+        return observations;
     }
 
     /**

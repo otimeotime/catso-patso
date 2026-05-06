@@ -7,6 +7,7 @@
 #include "algorithms/uct/uct_decision_node.h"
 #include "algorithms/uct/uct_manager.h"
 
+#include "exp/oracles/discrete_cvar_oracle_common.h"
 #include "mc_eval.h"
 #include "mcts.h"
 #include "mcts_env_context.h"
@@ -380,6 +381,7 @@ namespace {
         shared_ptr<const mcts::exp::BettingGameEnv> env,
         shared_ptr<const mcts::MctsDNode> root,
         const OptimalDistributionSolution& root_solution,
+        double eval_tau,
         double optimal_action_regret_threshold)
     {
         auto context = env->sample_context_itfc(env->get_initial_state_itfc());
@@ -391,9 +393,13 @@ namespace {
 
         const auto action_cvar_it = root_solution.action_cvars.find(recommended_action_id);
         if (action_cvar_it != root_solution.action_cvars.end()) {
-            metrics.cvar_regret = std::abs(root_solution.optimal_cvar - action_cvar_it->second);
-            if (metrics.cvar_regret <= optimal_action_regret_threshold + kCvarTolerance) {
-                metrics.optimal_action_hit = 1.0;
+            const double estimated_action_cvar =
+                mcts::exp::oracles::estimate_recommended_action_cvar(root, recommended_action, eval_tau);
+            if (!std::isnan(estimated_action_cvar)) {
+                metrics.cvar_regret = std::abs(root_solution.optimal_cvar - estimated_action_cvar);
+                if (metrics.cvar_regret <= optimal_action_regret_threshold + kCvarTolerance) {
+                    metrics.optimal_action_hit = 1.0;
+                }
             }
         }
 
@@ -427,8 +433,8 @@ namespace {
         // no longer swept here.
         constexpr double p_mean = 1.0;
 
-        for (int n_atoms : {25, 51, 100}) {
-            for (double optimism : {2.0, 4.0, 8.0}) {
+        for (int n_atoms : {25, 51, 100, 151, 201}) {
+            for (double optimism : {0.0, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0}) {
                 for (double tau : tau_values) {
                     string cfg = "atoms=" + to_string(n_atoms)
                         + ",optimism=" + to_string(optimism)
@@ -522,7 +528,7 @@ int main(int argc, char** argv) {
     const int max_sequence_length = 6;
     const double max_state_value = mcts::exp::BettingGameEnv::default_max_state_value;
     const double initial_state = mcts::exp::BettingGameEnv::default_initial_state;
-    const double reward_normalisation = mcts::exp::BettingGameEnv::default_reward_normalisation;
+    const double reward_normalisation = max_state_value;
     const double cvar_tau = 0.2;
     const int horizon = max_sequence_length;
     const int total_trials = 10000;
@@ -604,6 +610,7 @@ int main(int argc, char** argv) {
                 env,
                 root,
                 root_solution,
+                cand.eval_tau,
                 optimal_action_regret_threshold);
             out << "bettinggame," << cand.algo << "," << csv_escape(cand.config) << "," << cand.eval_tau << "," << run
                 << "," << stats.mean << "," << stats.stddev

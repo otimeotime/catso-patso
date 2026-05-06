@@ -15,13 +15,11 @@ CATSO:
   n_atoms:
     type: int
     low: 5
-    high: 151
+    high: 201
     step: 10
   optimism:
-    type: float
-    low: 0.5
-    high: 32.0
-    log: true
+    type: categorical
+    choices: [0.0, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0]
 
 PATSO:
   max_particles:

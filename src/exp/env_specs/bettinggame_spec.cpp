@@ -14,6 +14,9 @@ namespace mcts::exp {
 
         constexpr double kWinProb = 0.8;
         constexpr int kMaxSequenceLength = 6;
+        constexpr double kRewardNormalisation = mcts::exp::BettingGameEnv::default_max_state_value;
+        constexpr double kCatsoPowerMean = 1.0;
+        constexpr double kPatsoPowerMean = 1.0;
         constexpr double kCvarTau = 0.25;
         constexpr int kEvalRollouts = 50;
         constexpr int kRuns = 50;
@@ -42,11 +45,13 @@ namespace mcts::exp {
             1.0);
         mcts::exp::env_specs::configure_distributional_run_config(
             spec.run_candidate_config,
-            50,
+            201,
             8.0,
-            32,
-            1.0,
+            128,
+            4.0,
             1.0);
+        spec.run_candidate_config.catso.power_mean_exponent = kCatsoPowerMean;
+        spec.run_candidate_config.patso.power_mean_exponent = kPatsoPowerMean;
 
         mcts::exp::env_specs::configure_uct_family_tuning_grid(
             spec.tuning_grid_config,
@@ -55,12 +60,14 @@ namespace mcts::exp {
             {1.0, 2.0, 4.0, 8.0});
         mcts::exp::env_specs::configure_distributional_tuning_grid(
             spec.tuning_grid_config,
-            {25, 51, 100},
-            {2.0, 4.0, 8.0},
+            {25, 51, 100, 151, 201},
+            {0.0, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0},
             {32, 64, 128},
             {2.0, 4.0, 8.0},
             {1.0, 2.0, 4.0, 8.0},
             {0.05, 0.1, 0.25});
+        spec.tuning_grid_config.catso.power_mean_exponent_values = {1.0, 2.0, 4.0, 8.0};
+        spec.tuning_grid_config.patso.power_mean_exponent_values = {1.0, 2.0, 4.0, 8.0};
         spec.tune_total_trials = 10000;
         spec.tune_runs = 1;
         spec.tune_threads = kTuneThreads;
@@ -72,7 +79,7 @@ namespace mcts::exp {
                 kMaxSequenceLength,
                 mcts::exp::BettingGameEnv::default_max_state_value,
                 mcts::exp::BettingGameEnv::default_initial_state,
-                mcts::exp::BettingGameEnv::default_reward_normalisation);
+                kRewardNormalisation);
         };
 
         spec.print_env_info = [](std::ostream& os) {
@@ -82,6 +89,7 @@ namespace mcts::exp {
                << ", max_sequence_length=" << kMaxSequenceLength
                << ", initial_state=" << mcts::exp::BettingGameEnv::default_initial_state
                << ", max_state_value=" << mcts::exp::BettingGameEnv::default_max_state_value
+               << ", reward_normalisation=" << kRewardNormalisation
                << ", cvar_tau=" << kCvarTau
                << "\n";
         };

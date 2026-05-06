@@ -174,6 +174,15 @@ namespace mcts {
         return children.at(action);
     }
 
+    vector<shared_ptr<const Action>> MctsDNode::get_child_actions_itfc() const {
+        vector<shared_ptr<const Action>> actions;
+        actions.reserve(children.size());
+        for (const auto& action_child_pair : children) {
+            actions.push_back(action_child_pair.first);
+        }
+        return actions;
+    }
+
     /**
      * Returns a pretty printing of the node as a string. This is just a wrapper around the helper function. 
      * 

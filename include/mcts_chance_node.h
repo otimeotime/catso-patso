@@ -229,6 +229,14 @@ namespace mcts {
             virtual int get_num_children() const;
 
             /**
+             * Gets the number of times that the node has been visited.
+             *
+             * Returns:
+             *      The number of times this node has been visited.
+             */
+            int get_num_visits() const;
+
+            /**
              * Helper function to check if node has a child for the given observation
              * 
              * Args:
@@ -252,6 +260,19 @@ namespace mcts {
              */
             virtual std::shared_ptr<MctsDNode> get_child_node_itfc(
                 std::shared_ptr<const Observation> observation) const;
+
+            /**
+             * Returns the exact observation pointers currently stored in this node's
+             * child map.
+             *
+             * This is primarily useful for debugging and inspection code that needs
+             * to query child nodes without reconstructing semantically-equal
+             * observation objects.
+             *
+             * Returns:
+             *      A vector containing the child-map observation keys.
+             */
+            std::vector<std::shared_ptr<const Observation>> get_child_observations_itfc() const;
 
             /**
              * Pretty prints the tree to a string.

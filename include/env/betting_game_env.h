@@ -25,9 +25,10 @@ namespace mcts::exp {
     class BettingGameEnv : public mcts::MctsEnv {
         public:
             static constexpr int num_actions = 9;
+            static constexpr int min_action_id = 1;
             static constexpr double default_max_state_value = 256.0;
             static constexpr double default_initial_state = 16.0;
-            static constexpr double default_reward_normalisation = 256.0;
+            static constexpr double default_reward_normalisation = 1.0;
 
         private:
             double win_prob;

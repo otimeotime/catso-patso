@@ -18,11 +18,12 @@ int main(int argc, char** argv) {
     constexpr int kRuns = 3;
     constexpr int kThreads = 8;
     constexpr int kBaseSeed = 4242;
-    constexpr int kCatsoAtoms = 100;
-    constexpr double kCatsoOptimism = 4.0;
-    constexpr double kPowerMeanExponent = 1.0;
+    constexpr int kCatsoAtoms = 201;
+    constexpr double kCatsoOptimism = 8.0;
+    constexpr double kCatsoPowerMeanExponent = 1.0;
     constexpr int kPatsoParticles = 128;
-    constexpr double kPatsoOptimism = 2.0;
+    constexpr double kPatsoOptimism = 4.0;
+    constexpr double kPatsoPowerMeanExponent = 1.0;
     constexpr double kUctEpsilon = 0.05;
 
     vector<int> trial_counts = {2000, 5000, 10000, 15000};
@@ -32,9 +33,9 @@ int main(int argc, char** argv) {
         kMaxSequenceLength,
         mcts::exp::BettingGameEnv::default_max_state_value,
         mcts::exp::BettingGameEnv::default_initial_state,
-        mcts::exp::BettingGameEnv::default_reward_normalisation);
+        mcts::exp::BettingGameEnv::default_max_state_value);
     const string extra_info =
-        "win_prob=0.8, max_sequence_length=6, initial_state=16, max_state_value=256";
+        "win_prob=0.8, max_sequence_length=6, initial_state=16, max_state_value=256, reward_normalisation=256";
 
     return mcts::exp::runner::run_simple_experiment(
         "bettinggame",
@@ -52,8 +53,9 @@ int main(int argc, char** argv) {
         "results_bettinggame_summary.csv",
         kCatsoAtoms,
         kCatsoOptimism,
-        kPowerMeanExponent,
+        kCatsoPowerMeanExponent,
         kPatsoParticles,
         kPatsoOptimism,
+        kPatsoPowerMeanExponent,
         kUctEpsilon);
 }

@@ -18,6 +18,7 @@
 #include "algorithms/uct/uct_decision_node.h"
 #include "algorithms/uct/uct_manager.h"
 
+#include "exp/oracles/discrete_cvar_oracle_common.h"
 #include "mc_eval.h"
 #include "mcts.h"
 #include "mcts_env_context.h"
@@ -57,6 +58,7 @@ namespace {
         double uct_epsilon = 0.1;    // UCT
         // Eval settings
         double cvar_tau = 0.25;
+        double discount_gamma = 1.0;
         int trial_budget = 10000;
         int num_seeds = 3;
         int base_seed = 4242;
@@ -64,6 +66,8 @@ namespace {
         int threads = 8;
         int horizon = 6;  // mirrors max_sequence_length default
         bool debug_trajectories = false;
+        bool debug_root_actions = false;
+        int debug_subtree_action = -1;
     };
 
     static void usage(ostream& out) {
@@ -71,9 +75,10 @@ namespace {
                "  Hyperparams (CATSO): --n-atoms INT --optimism FLOAT --power-mean FLOAT\n"
                "  Hyperparams (PATSO): --max-particles INT --optimism FLOAT --power-mean FLOAT\n"
                "  Hyperparams (UCT)  : --uct-bias FLOAT (or -1 for auto) --uct-epsilon FLOAT\n"
-               "  Eval               : --cvar-tau FLOAT --trial-budget INT --num-seeds INT\n"
+               "  Eval               : --cvar-tau FLOAT --gamma FLOAT --trial-budget INT --num-seeds INT\n"
                "                       --base-seed INT --eval-rollouts INT --threads INT --horizon INT\n"
-               "                       [--debug-trajectories]\n"
+               "                       [--debug-trajectories] [--debug-root-actions]\n"
+               "                       [--debug-subtree-action INT]\n"
                "Output: ONE JSON line on stdout with averaged metrics.\n";
     }
 
@@ -96,6 +101,10 @@ namespace {
                 args.debug_trajectories = true;
                 continue;
             }
+            if (flag == "--debug-root-actions") {
+                args.debug_root_actions = true;
+                continue;
+            }
             if (i + 1 >= argc) {
                 cerr << "missing value for flag " << flag << "\n";
                 usage(cerr);
@@ -111,12 +120,14 @@ namespace {
             else if (flag == "--uct-bias") { if (!parse_double(val, args.uct_bias)) exit(2); }
             else if (flag == "--uct-epsilon") { if (!parse_double(val, args.uct_epsilon)) exit(2); }
             else if (flag == "--cvar-tau") { if (!parse_double(val, args.cvar_tau)) exit(2); }
+            else if (flag == "--gamma") { if (!parse_double(val, args.discount_gamma)) exit(2); }
             else if (flag == "--trial-budget") { if (!parse_int(val, args.trial_budget)) exit(2); }
             else if (flag == "--num-seeds") { if (!parse_int(val, args.num_seeds)) exit(2); }
             else if (flag == "--base-seed") { if (!parse_int(val, args.base_seed)) exit(2); }
             else if (flag == "--eval-rollouts") { if (!parse_int(val, args.eval_rollouts)) exit(2); }
             else if (flag == "--threads") { if (!parse_int(val, args.threads)) exit(2); }
             else if (flag == "--horizon") { if (!parse_int(val, args.horizon)) exit(2); }
+            else if (flag == "--debug-subtree-action") { if (!parse_int(val, args.debug_subtree_action)) exit(2); }
             else {
                 cerr << "unknown flag: " << flag << "\n";
                 usage(cerr);
@@ -130,6 +141,10 @@ namespace {
         }
         if (args.num_seeds <= 0 || args.trial_budget <= 0 || args.eval_rollouts <= 0) {
             cerr << "num-seeds, trial-budget, eval-rollouts must all be > 0\n";
+            exit(2);
+        }
+        if (args.discount_gamma < 0.0 || args.discount_gamma > 1.0) {
+            cerr << "gamma must be in [0,1]\n";
             exit(2);
         }
         return args;
@@ -343,6 +358,7 @@ namespace {
         shared_ptr<const mcts::exp::BettingGameEnv> env,
         shared_ptr<const mcts::MctsDNode> root,
         const OptimalDistributionSolution& root_solution,
+        double eval_tau,
         PerSeedMetrics& m)
     {
         auto context = env->sample_context_itfc(env->get_initial_state_itfc());
@@ -350,9 +366,317 @@ namespace {
         const int rid = static_pointer_cast<const mcts::IntAction>(recommended)->action;
         const auto it = root_solution.action_cvars.find(rid);
         if (it != root_solution.action_cvars.end()) {
-            m.cvar_regret = std::abs(root_solution.optimal_cvar - it->second);
-            if (m.cvar_regret <= kCvarTolerance) m.optimal_action_hit = 1.0;
+            const double estimated_action_cvar =
+                mcts::exp::oracles::estimate_recommended_action_cvar(root, recommended, eval_tau);
+            if (!std::isnan(estimated_action_cvar)) {
+                m.cvar_regret = std::abs(root_solution.optimal_cvar - estimated_action_cvar);
+                if (m.cvar_regret <= kCvarTolerance) m.optimal_action_hit = 1.0;
+            }
         }
+    }
+
+    static double compute_bet_amount(
+        shared_ptr<const mcts::exp::BettingGameEnv> env,
+        shared_ptr<const mcts::exp::BettingGameState> state,
+        int action_id)
+    {
+        const double action_fraction =
+            static_cast<double>(action_id) / static_cast<double>(mcts::exp::BettingGameEnv::num_actions - 1);
+        return min(state->bankroll * action_fraction, env->get_max_state_value() - state->bankroll);
+    }
+
+    static string format_action_ids(const vector<int>& action_ids) {
+        ostringstream oss;
+        oss << "[";
+        for (size_t i = 0; i < action_ids.size(); ++i) {
+            if (i > 0) oss << ",";
+            oss << action_ids[i];
+        }
+        oss << "]";
+        return oss.str();
+    }
+
+    static string format_optional_double(double value) {
+        if (std::isnan(value)) {
+            return "na";
+        }
+        ostringstream oss;
+        oss << setprecision(10) << value;
+        return oss.str();
+    }
+
+    static string format_optional_int(int value) {
+        if (value < 0) {
+            return "na";
+        }
+        return to_string(value);
+    }
+
+    static bool same_betting_game_state(
+        shared_ptr<const mcts::exp::BettingGameState> lhs,
+        shared_ptr<const mcts::exp::BettingGameState> rhs)
+    {
+        return lhs != nullptr
+            && rhs != nullptr
+            && lhs->bankroll == rhs->bankroll
+            && lhs->time == rhs->time;
+    }
+
+    static void print_root_action_debug(
+        shared_ptr<const mcts::exp::BettingGameEnv> env,
+        shared_ptr<const mcts::MctsDNode> root,
+        const OptimalDistributionSolution& root_solution,
+        double eval_tau,
+        int seed_index)
+    {
+        auto context = env->sample_context_itfc(env->get_initial_state_itfc());
+        auto recommended = root->recommend_action_itfc(*context);
+        const int recommended_action_id =
+            static_pointer_cast<const mcts::IntAction>(recommended)->action;
+        const auto root_state = env->get_initial_state();
+
+        unordered_map<int, shared_ptr<const mcts::Action>> expanded_actions;
+        unordered_map<int, int> expanded_visits;
+        for (const auto& action_ptr : root->get_child_actions_itfc()) {
+            const int action_id = static_pointer_cast<const mcts::IntAction>(action_ptr)->action;
+            expanded_actions[action_id] = action_ptr;
+            expanded_visits[action_id] = root->get_child_node_itfc(action_ptr)->get_num_visits();
+        }
+
+        cerr << "[debug-root] seed=" << seed_index
+             << " recommended_action=" << recommended_action_id
+             << " bet=" << compute_bet_amount(env, root_state, recommended_action_id)
+             << " oracle_optimal_cvar=" << root_solution.optimal_cvar
+             << " oracle_optimal_actions=" << format_action_ids(root_solution.optimal_actions)
+             << " root_visits=" << root->get_num_visits()
+             << " expanded_children=" << root->get_num_children()
+             << "\n";
+        cerr << "[debug-root] action_id bet visits oracle_cvar estimated_edge_cvar tags\n";
+
+        const auto legal_actions = env->get_valid_actions(root_state);
+        for (const auto& legal_action : *legal_actions) {
+            const int action_id = legal_action->action;
+            const double bet = compute_bet_amount(env, root_state, action_id);
+            const auto oracle_it = root_solution.action_cvars.find(action_id);
+            const double oracle_cvar =
+                (oracle_it == root_solution.action_cvars.end())
+                    ? numeric_limits<double>::quiet_NaN()
+                    : oracle_it->second;
+
+            double estimated_action_cvar = numeric_limits<double>::quiet_NaN();
+            int visits = 0;
+            if (const auto expanded_it = expanded_actions.find(action_id); expanded_it != expanded_actions.end()) {
+                visits = expanded_visits[action_id];
+                estimated_action_cvar =
+                    mcts::exp::oracles::estimate_recommended_action_cvar(root, expanded_it->second, eval_tau);
+            }
+
+            string tags;
+            if (action_id == recommended_action_id) {
+                tags += "recommended";
+            }
+            if (find(root_solution.optimal_actions.begin(), root_solution.optimal_actions.end(), action_id) !=
+                root_solution.optimal_actions.end()) {
+                if (!tags.empty()) tags += ",";
+                tags += "oracle-optimal";
+            }
+
+            cerr << "[debug-root] "
+                 << action_id << " "
+                 << bet << " "
+                 << visits << " "
+                 << format_optional_double(oracle_cvar) << " "
+                 << format_optional_double(estimated_action_cvar) << " "
+                 << (tags.empty() ? "-" : tags)
+                 << "\n";
+        }
+    }
+
+    static void print_root_action_subtree_debug(
+        shared_ptr<const mcts::exp::BettingGameEnv> env,
+        shared_ptr<const mcts::MctsDNode> root,
+        const OptimalDistributionSolution& root_solution,
+        BettingGameCvarOracle& oracle,
+        double eval_tau,
+        double discount_gamma,
+        int action_id,
+        int seed_index)
+    {
+        shared_ptr<const mcts::Action> action_ptr = nullptr;
+        for (const auto& child_action : root->get_child_actions_itfc()) {
+            const int child_action_id = static_pointer_cast<const mcts::IntAction>(child_action)->action;
+            if (child_action_id == action_id) {
+                action_ptr = child_action;
+                break;
+            }
+        }
+
+        if (action_ptr == nullptr) {
+            cerr << "[debug-subtree] seed=" << seed_index
+                 << " action_id=" << action_id
+                 << " status=not-expanded\n";
+            return;
+        }
+
+        const auto chance_node =
+            dynamic_pointer_cast<const mcts::CatsoCNode>(root->get_child_node_itfc(action_ptr));
+        if (chance_node == nullptr) {
+            cerr << "[debug-subtree] seed=" << seed_index
+                 << " action_id=" << action_id
+                 << " status=unsupported-root-algorithm\n";
+            return;
+        }
+
+        const auto root_state = env->get_initial_state();
+        const auto typed_action = static_pointer_cast<const mcts::IntAction>(action_ptr);
+        const auto transitions = env->get_transition_distribution(root_state, typed_action);
+        const auto expanded_observations = chance_node->get_child_observations_itfc();
+        ReturnDistribution snapshot_distribution;
+        double snapshot_mean = 0.0;
+
+        const auto oracle_action_it = root_solution.action_cvars.find(action_id);
+        const double oracle_action_cvar =
+            oracle_action_it == root_solution.action_cvars.end()
+                ? numeric_limits<double>::quiet_NaN()
+                : oracle_action_it->second;
+
+        cerr << "[debug-subtree] seed=" << seed_index
+             << " root_action=" << action_id
+             << " bet=" << compute_bet_amount(env, root_state, action_id)
+             << " chance_visits=" << chance_node->get_num_visits()
+             << " chance_mean=" << chance_node->get_mean_value()
+             << " chance_cvar=" << chance_node->get_cvar_value_at(eval_tau)
+             << " oracle_action_cvar=" << format_optional_double(oracle_action_cvar)
+             << " gamma=" << discount_gamma
+             << "\n";
+        cerr << "[debug-subtree] child_state prob immediate_reward child_value gamma_child_value "
+                "backed_up_q oracle_state_cvar child_visits child_rec_action child_rec_edge_cvar\n";
+
+        for (const auto& [next_state_raw, probability] : *transitions) {
+            const auto next_state = static_pointer_cast<const mcts::exp::BettingGameState>(next_state_raw);
+            const double immediate_reward = env->get_reward(root_state, typed_action, next_state);
+            shared_ptr<const mcts::exp::BettingGameState> expanded_state = nullptr;
+
+            for (const auto& observation : expanded_observations) {
+                const auto observed_state = static_pointer_cast<const mcts::exp::BettingGameState>(observation);
+                if (same_betting_game_state(observed_state, next_state)) {
+                    expanded_state = observed_state;
+                    break;
+                }
+            }
+
+            double child_value = 0.0;
+            int child_visits = 0;
+            int child_recommended_action_id = -1;
+            double child_recommended_edge_cvar = numeric_limits<double>::quiet_NaN();
+            if (expanded_state != nullptr && chance_node->has_child_node(expanded_state)) {
+                const auto child_node =
+                    dynamic_pointer_cast<const mcts::CatsoDNode>(chance_node->get_child_node(expanded_state));
+                if (child_node != nullptr) {
+                    child_value = child_node->get_value_estimate();
+                    child_visits = child_node->get_num_visits();
+                    auto child_context =
+                        env->sample_context_itfc(static_pointer_cast<const mcts::State>(expanded_state));
+                    auto child_recommended_action = child_node->recommend_action_itfc(*child_context);
+                    child_recommended_action_id =
+                        static_pointer_cast<const mcts::IntAction>(child_recommended_action)->action;
+                    child_recommended_edge_cvar = mcts::exp::oracles::estimate_recommended_action_cvar(
+                        static_pointer_cast<const mcts::MctsDNode>(child_node),
+                        child_recommended_action,
+                        eval_tau);
+                }
+            }
+
+            const double backed_up_q = immediate_reward + discount_gamma * child_value;
+            snapshot_distribution[backed_up_q] += probability;
+            snapshot_mean += probability * backed_up_q;
+
+            const auto& child_solution = oracle.solve_state(next_state);
+            cerr << "[debug-subtree] "
+                 << next_state->get_pretty_print_string() << " "
+                 << probability << " "
+                 << immediate_reward << " "
+                 << child_value << " "
+                 << (discount_gamma * child_value) << " "
+                 << backed_up_q << " "
+                 << child_solution.optimal_cvar << " "
+                 << child_visits << " "
+                 << format_optional_int(child_recommended_action_id) << " "
+                 << format_optional_double(child_recommended_edge_cvar)
+                 << "\n";
+
+            if (expanded_state != nullptr && chance_node->has_child_node(expanded_state)) {
+                const auto child_node =
+                    dynamic_pointer_cast<const mcts::CatsoDNode>(chance_node->get_child_node(expanded_state));
+                if (child_node != nullptr) {
+                    unordered_map<int, shared_ptr<const mcts::Action>> expanded_actions;
+                    unordered_map<int, int> expanded_visits;
+                    for (const auto& child_action : child_node->get_child_actions_itfc()) {
+                        const int child_action_id =
+                            static_pointer_cast<const mcts::IntAction>(child_action)->action;
+                        expanded_actions[child_action_id] = child_action;
+                        expanded_visits[child_action_id] =
+                            child_node->get_child_node_itfc(child_action)->get_num_visits();
+                    }
+
+                    cerr << "[debug-subtree-actions] state=" << next_state->get_pretty_print_string()
+                         << " value_estimate=" << child_node->get_value_estimate()
+                         << " recommended_action=" << format_optional_int(child_recommended_action_id)
+                         << "\n";
+                    cerr << "[debug-subtree-actions] action_id bet visits oracle_cvar estimated_edge_cvar tags\n";
+
+                    const auto legal_actions = env->get_valid_actions(next_state);
+                    for (const auto& legal_action : *legal_actions) {
+                        const int legal_action_id = legal_action->action;
+                        const double legal_bet = compute_bet_amount(env, next_state, legal_action_id);
+                        const auto oracle_child_it = child_solution.action_cvars.find(legal_action_id);
+                        const double oracle_child_cvar =
+                            oracle_child_it == child_solution.action_cvars.end()
+                                ? numeric_limits<double>::quiet_NaN()
+                                : oracle_child_it->second;
+                        double estimated_child_edge_cvar = numeric_limits<double>::quiet_NaN();
+                        int action_visits = 0;
+                        if (const auto expanded_it = expanded_actions.find(legal_action_id);
+                            expanded_it != expanded_actions.end())
+                        {
+                            action_visits = expanded_visits[legal_action_id];
+                            estimated_child_edge_cvar = mcts::exp::oracles::estimate_recommended_action_cvar(
+                                static_pointer_cast<const mcts::MctsDNode>(child_node),
+                                expanded_it->second,
+                                eval_tau);
+                        }
+
+                        string tags;
+                        if (legal_action_id == child_recommended_action_id) {
+                            tags += "recommended";
+                        }
+                        if (find(
+                                child_solution.optimal_actions.begin(),
+                                child_solution.optimal_actions.end(),
+                                legal_action_id) != child_solution.optimal_actions.end())
+                        {
+                            if (!tags.empty()) tags += ",";
+                            tags += "oracle-optimal";
+                        }
+
+                        cerr << "[debug-subtree-actions] "
+                             << legal_action_id << " "
+                             << legal_bet << " "
+                             << action_visits << " "
+                             << format_optional_double(oracle_child_cvar) << " "
+                             << format_optional_double(estimated_child_edge_cvar) << " "
+                             << (tags.empty() ? "-" : tags)
+                             << "\n";
+                    }
+                }
+            }
+        }
+
+        const double snapshot_cvar = compute_lower_tail_cvar(snapshot_distribution, eval_tau);
+        cerr << "[debug-subtree] snapshot_mean=" << snapshot_mean
+             << " snapshot_cvar=" << snapshot_cvar
+             << " chance_minus_snapshot=" << (chance_node->get_cvar_value_at(eval_tau) - snapshot_cvar)
+             << "\n";
     }
 
     // ------------------------------------------------- Manager / root construction
@@ -385,6 +709,7 @@ namespace {
             a.optimism_constant = args.optimism;
             a.power_mean_exponent = args.power_mean;
             a.cvar_tau = args.cvar_tau;
+            a.discount_gamma = args.discount_gamma;
             a.seed = seed;
             auto mgr = make_shared<mcts::CatsoManager>(a);
             auto root = make_shared<mcts::CatsoDNode>(mgr, init_state, 0, 0);
@@ -398,6 +723,7 @@ namespace {
         a.optimism_constant = args.optimism;
         a.power_mean_exponent = args.power_mean;
         a.cvar_tau = args.cvar_tau;
+        a.discount_gamma = args.discount_gamma;
         a.seed = seed;
         auto mgr = make_shared<mcts::PatsoManager>(a);
         auto root = make_shared<mcts::PatsoDNode>(mgr, init_state, 0, 0);
@@ -465,7 +791,7 @@ int main(int argc, char** argv) {
     const int max_sequence_length = args.horizon;  // Betting Game defines horizon == max_sequence_length
     const double max_state_value = mcts::exp::BettingGameEnv::default_max_state_value;
     const double initial_state = mcts::exp::BettingGameEnv::default_initial_state;
-    const double reward_normalisation = mcts::exp::BettingGameEnv::default_reward_normalisation;
+    const double reward_normalisation = max_state_value;
 
     auto env = make_shared<mcts::exp::BettingGameEnv>(
         win_prob, max_sequence_length, max_state_value, initial_state, reward_normalisation);
@@ -473,6 +799,7 @@ int main(int argc, char** argv) {
     // Diagnostics to stderr (stdout is reserved for the JSON line).
     cerr << "[eval-bettinggame] algo=" << args.algo
          << ", cvar_tau=" << args.cvar_tau
+         << ", gamma=" << args.discount_gamma
          << ", trial_budget=" << args.trial_budget
          << ", num_seeds=" << args.num_seeds
          << ", eval_rollouts=" << args.eval_rollouts
@@ -506,7 +833,21 @@ int main(int argc, char** argv) {
             args.cvar_tau,
             args.debug_trajectories,
             args.algo);
-        evaluate_root_recommendation(env, root, root_solution, m);
+        evaluate_root_recommendation(env, root, root_solution, args.cvar_tau, m);
+        if (args.debug_root_actions) {
+            print_root_action_debug(env, root, root_solution, args.cvar_tau, s + 1);
+        }
+        if (args.debug_subtree_action >= 0) {
+            print_root_action_subtree_debug(
+                env,
+                root,
+                root_solution,
+                oracle,
+                args.cvar_tau,
+                args.discount_gamma,
+                args.debug_subtree_action,
+                s + 1);
+        }
         m.wall_time_sec =
             chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now() - t0).count();
 

@@ -51,6 +51,7 @@ namespace mcts {
                 const double trial_cumulative_return_after_node,
                 const double trial_cumulative_return,
                 MctsEnvContext& ctx);
+            double get_value_estimate() const;
 
         protected:
             virtual std::shared_ptr<CatsoCNode> create_child_node_helper(

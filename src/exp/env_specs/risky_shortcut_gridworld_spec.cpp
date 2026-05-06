@@ -17,7 +17,9 @@ namespace mcts::exp {
         constexpr double kStepCost = 0.0;
         constexpr double kGoalReward = 5.0;
         constexpr double kCliffPenalty = -20.0;
-        constexpr int kMaxSteps = 20;
+        // Keep the gridworld shallow enough that the root child CVaR estimates
+        // can converge under the available trial budgets.
+        constexpr int kMaxSteps = 6;
 
 
         spec.env_name = "risky_shortcut_gridworld";
@@ -30,7 +32,7 @@ namespace mcts::exp {
         spec.threads = 8;
         spec.base_seed = 4242;
         spec.cvar_tau = 0.05;
-        spec.discount_gamma = 0.95;
+        spec.discount_gamma = 1.0;
         spec.trial_counts = {100, 200, 500, 1000, 2000, 5000, 10000, 15000, 20000, 30000, 40000, 50000, 60000, 70000, 80000, 90000, 100000};
 
         mcts::exp::env_specs::configure_uct_family_run_config(

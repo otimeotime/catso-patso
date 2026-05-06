@@ -308,6 +308,17 @@ namespace mcts {
             virtual std::shared_ptr<MctsCNode> get_child_node_itfc(std::shared_ptr<const Action> action) const;
 
             /**
+             * Returns the exact action pointers currently stored in this node's child map.
+             *
+             * This is primarily useful for debugging and inspection code that needs to
+             * query child nodes without reconstructing semantically-equal action objects.
+             *
+             * Returns:
+             *      A vector containing the child-map action keys.
+             */
+            std::vector<std::shared_ptr<const Action>> get_child_actions_itfc() const;
+
+            /**
              * Pretty prints the tree to a string.
              * 
              * Args:

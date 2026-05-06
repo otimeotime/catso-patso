@@ -213,6 +213,10 @@ namespace mcts {
         value_estimate = compute_power_mean_value();
     }
 
+    double CatsoDNode::get_value_estimate() const {
+        return value_estimate;
+    }
+
     shared_ptr<CatsoCNode> CatsoDNode::create_child_node_helper(shared_ptr<const Action> action) const {
         return make_shared<CatsoCNode>(
             static_pointer_cast<CatsoManager>(mcts_manager),

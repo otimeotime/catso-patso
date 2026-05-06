@@ -129,8 +129,8 @@ int main(int argc, char** argv) {
     const CliArgs args = parse_args(
         static_cast<int>(filtered_argv.size()),
         const_cast<char**>(filtered_argv.data()),
-        /*default_horizon=*/20,
-        /*default_discount_gamma=*/0.95);
+        /*default_horizon=*/6,
+        /*default_discount_gamma=*/1.0);
 
     auto env = make_shared<mcts::exp::RiskyShortcutGridworldEnv>(
         env_args.grid_size,
