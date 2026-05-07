@@ -56,7 +56,7 @@ namespace mcts::exp {
             {1.0, 2.0, 4.0, 8.0});
         mcts::exp::env_specs::configure_distributional_tuning_grid(
             spec.tuning_grid_config,
-            {25, 51, 100},
+            {10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200},
             {2.0, 4.0, 8.0},
             {64, 100, 128},
             {2.0, 4.0, 8.0},

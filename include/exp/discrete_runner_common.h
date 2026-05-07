@@ -394,29 +394,19 @@ namespace mcts::exp::runner {
         const OptimalDistributionSolution& root_solution,
         double eval_tau)
     {
-        auto context = env->sample_context_itfc(env->get_initial_state_itfc());
-        std::shared_ptr<const mcts::Action> recommended_action = root->recommend_action_itfc(*context);
-        const int recommended_action_id =
-            std::static_pointer_cast<const mcts::IntAction>(recommended_action)->action;
+        (void)env;
+        (void)eval_tau;
 
         ExperimentMetrics metrics{
             std::numeric_limits<double>::quiet_NaN(),
             0.0
         };
 
-        for (int optimal_action_id : root_solution.optimal_actions) {
-            if (recommended_action_id == optimal_action_id) {
+        const double estimated_root_value = mcts::exp::oracles::estimate_root_state_value(root);
+        if (!std::isnan(estimated_root_value)) {
+            metrics.cvar_regret = root_solution.optimal_cvar - estimated_root_value;
+            if (metrics.cvar_regret <= mcts::exp::kCvarTolerance) {
                 metrics.optimal_action_hit = 1.0;
-                break;
-            }
-        }
-
-        const auto action_cvar_it = root_solution.action_cvars.find(recommended_action_id);
-        if (action_cvar_it != root_solution.action_cvars.end()) {
-            const double estimated_action_cvar =
-                mcts::exp::oracles::estimate_recommended_action_cvar(root, recommended_action, eval_tau);
-            if (!std::isnan(estimated_action_cvar)) {
-                metrics.cvar_regret = std::abs(root_solution.optimal_cvar - estimated_action_cvar);
             }
         }
 

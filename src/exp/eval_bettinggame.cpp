@@ -361,17 +361,12 @@ namespace {
         double eval_tau,
         PerSeedMetrics& m)
     {
-        auto context = env->sample_context_itfc(env->get_initial_state_itfc());
-        auto recommended = root->recommend_action_itfc(*context);
-        const int rid = static_pointer_cast<const mcts::IntAction>(recommended)->action;
-        const auto it = root_solution.action_cvars.find(rid);
-        if (it != root_solution.action_cvars.end()) {
-            const double estimated_action_cvar =
-                mcts::exp::oracles::estimate_recommended_action_cvar(root, recommended, eval_tau);
-            if (!std::isnan(estimated_action_cvar)) {
-                m.cvar_regret = std::abs(root_solution.optimal_cvar - estimated_action_cvar);
-                if (m.cvar_regret <= kCvarTolerance) m.optimal_action_hit = 1.0;
-            }
+        (void)env;
+        (void)eval_tau;
+        const double estimated_root_value = mcts::exp::oracles::estimate_root_state_value(root);
+        if (!std::isnan(estimated_root_value)) {
+            m.cvar_regret = root_solution.optimal_cvar - estimated_root_value;
+            if (m.cvar_regret <= kCvarTolerance) m.optimal_action_hit = 1.0;
         }
     }
 

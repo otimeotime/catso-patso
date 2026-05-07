@@ -60,6 +60,26 @@ namespace mcts::exp::oracles {
         return std::numeric_limits<double>::quiet_NaN();
     }
 
+    inline double estimate_root_state_value(std::shared_ptr<const mcts::MctsDNode> root) {
+        if (const auto catso_root = std::dynamic_pointer_cast<const mcts::CatsoDNode>(root)) {
+            return catso_root->get_value_estimate();
+        }
+
+        if (const auto uct_root = std::dynamic_pointer_cast<const mcts::UctDNode>(root)) {
+            return uct_root->get_value_estimate();
+        }
+
+        if (const auto max_uct_root = std::dynamic_pointer_cast<const mcts::MaxUctDNode>(root)) {
+            return max_uct_root->get_value_estimate();
+        }
+
+        if (const auto power_uct_root = std::dynamic_pointer_cast<const mcts::PowerUctDNode>(root)) {
+            return power_uct_root->get_value_estimate();
+        }
+
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
     inline RootMetrics evaluate_root_action_cvar_metrics(
         std::shared_ptr<const mcts::MctsEnv> env,
         std::shared_ptr<const mcts::MctsDNode> root,
@@ -68,23 +88,15 @@ namespace mcts::exp::oracles {
         double optimal_action_regret_threshold = 0.0)
     {
         RootMetrics metrics;
+        (void)env;
+        (void)eval_tau;
 
-        auto context = env->sample_context_itfc(env->get_initial_state_itfc());
-        std::shared_ptr<const mcts::Action> recommended_action = root->recommend_action_itfc(*context);
-        const int recommended_action_id =
-            std::static_pointer_cast<const mcts::IntAction>(recommended_action)->action;
-
-        const auto action_cvar_it = root_solution.action_cvars.find(recommended_action_id);
-        if (action_cvar_it == root_solution.action_cvars.end()) {
+        const double estimated_root_value = estimate_root_state_value(root);
+        if (std::isnan(estimated_root_value)) {
             return metrics;
         }
 
-        const double estimated_action_cvar = estimate_recommended_action_cvar(root, recommended_action, eval_tau);
-        if (std::isnan(estimated_action_cvar)) {
-            return metrics;
-        }
-
-        metrics.cvar_regret = std::abs(root_solution.optimal_cvar - estimated_action_cvar);
+        metrics.cvar_regret = root_solution.optimal_cvar - estimated_root_value;
         metrics.optimal_action_hit =
             (metrics.cvar_regret <= optimal_action_regret_threshold + kCvarTolerance) ? 1.0 : 0.0;
         return metrics;

@@ -2,11 +2,8 @@
 
 #include "algorithms/catso/catso_manager.h"
 #include "algorithms/catso/patso_manager.h"
-#include "algorithms/ments/dents/dents_manager.h"
-#include "algorithms/ments/ments_manager.h"
 #include "algorithms/uct/power_uct_manager.h"
 #include "algorithms/uct/uct_manager.h"
-#include "algorithms/varde/varde_manager.h"
 #include "mcts_manager.h"
 
 #include <memory>
@@ -18,10 +15,6 @@ namespace mcts::exp {
         std::ostringstream ss;
         ss << value;
         return ss.str();
-    }
-
-    inline std::string format_manager_bool(bool value) {
-        return value ? "true" : "false";
     }
 
     inline std::string describe_manager_config(std::shared_ptr<const mcts::MctsManager> mgr) {
@@ -73,29 +66,6 @@ namespace mcts::exp {
                << ",p=" << format_manager_double(catso->power_mean_exponent)
                << ",cvar_tau=" << format_manager_double(catso->cvar_tau)
                << ",gamma=" << format_manager_double(catso->discount_gamma);
-            return ss.str();
-        }
-
-        if (auto dents = std::dynamic_pointer_cast<const mcts::DentsManager>(mgr)) {
-            std::ostringstream ss;
-            ss << "temp=" << format_manager_double(dents->temp)
-               << ",epsilon=" << format_manager_double(dents->epsilon)
-               << ",use_dp_value=" << format_manager_bool(dents->use_dp_value);
-            return ss.str();
-        }
-
-        if (auto ments = std::dynamic_pointer_cast<const mcts::MentsManager>(mgr)) {
-            std::ostringstream ss;
-            ss << "temp=" << format_manager_double(ments->temp)
-               << ",epsilon=" << format_manager_double(ments->epsilon);
-            return ss.str();
-        }
-
-        if (auto rvip = std::dynamic_pointer_cast<const mcts::RvipManager>(mgr)) {
-            std::ostringstream ss;
-            ss << "temp=" << format_manager_double(rvip->temp)
-               << ",variance_floor=" << format_manager_double(rvip->variance_floor)
-               << ",use_dp_value=" << format_manager_bool(rvip->use_dp_value);
             return ss.str();
         }
 

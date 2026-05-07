@@ -203,6 +203,7 @@ namespace mcts {
                 const double trial_cumulative_return_after_node, 
                 const double trial_cumulative_return,
                 MctsEnvContext& ctx);
+            double get_value_estimate() const { return avg_return; }
 
         protected:
             /**

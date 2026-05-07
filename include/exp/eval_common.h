@@ -18,6 +18,7 @@
 #include "algorithms/uct/uct_decision_node.h"
 #include "algorithms/uct/uct_manager.h"
 
+#include "exp/oracles/discrete_cvar_oracle_common.h"
 #include "mc_eval.h"
 #include "mcts.h"
 #include "mcts_env.h"
@@ -474,7 +475,6 @@ PerSeedMetrics evaluate_tree(
 //
 // SolutionT must expose:
 //   .optimal_cvar : double
-//   .action_cvars : map-like<int, double>     (find(rid) -> iterator)
 
 template <typename EnvT, typename SolutionT>
 void evaluate_root_recommendation(
@@ -483,12 +483,10 @@ void evaluate_root_recommendation(
     const SolutionT& root_solution,
     PerSeedMetrics& m)
 {
-    auto context = env->sample_context_itfc(env->get_initial_state_itfc());
-    auto recommended = root->recommend_action_itfc(*context);
-    const int rid = std::static_pointer_cast<const mcts::IntAction>(recommended)->action;
-    const auto it = root_solution.action_cvars.find(rid);
-    if (it != root_solution.action_cvars.end()) {
-        m.cvar_regret = std::abs(root_solution.optimal_cvar - it->second);
+    (void)env;
+    const double estimated_root_value = mcts::exp::oracles::estimate_root_state_value(root);
+    if (!std::isnan(estimated_root_value)) {
+        m.cvar_regret = root_solution.optimal_cvar - estimated_root_value;
         if (m.cvar_regret <= kCvarTolerance) m.optimal_action_hit = 1.0;
     }
 }

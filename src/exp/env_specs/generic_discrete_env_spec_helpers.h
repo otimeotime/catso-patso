@@ -142,34 +142,24 @@ namespace mcts::exp::env_specs {
             double discount_gamma)
         {
             RootMetrics metrics;
-
-            const auto env = std::static_pointer_cast<const EnvT>(generic_env);
+            (void)generic_env;
             auto& oracle = (*oracle_cache)[{eval_tau, discount_gamma}];
             if (!oracle) {
+                const auto env = std::static_pointer_cast<const EnvT>(generic_env);
                 oracle = std::make_shared<mcts::exp::runner::CvarOracle<EnvT, StateT>>(
                     env,
                     eval_tau,
                     discount_gamma);
             }
 
+            const auto env = std::static_pointer_cast<const EnvT>(generic_env);
             const auto& root_solution = oracle->solve_state(env->get_initial_state());
-            auto context = env->sample_context_itfc(env->get_initial_state_itfc());
-            std::shared_ptr<const mcts::Action> recommended_action = root->recommend_action_itfc(*context);
-            const int recommended_action_id =
-                std::static_pointer_cast<const mcts::IntAction>(recommended_action)->action;
-
-            const auto action_cvar_it = root_solution.action_cvars.find(recommended_action_id);
-            if (action_cvar_it == root_solution.action_cvars.end()) {
+            const double estimated_root_value = mcts::exp::oracles::estimate_root_state_value(root);
+            if (std::isnan(estimated_root_value)) {
                 return metrics;
             }
 
-            const double estimated_action_cvar =
-                mcts::exp::oracles::estimate_recommended_action_cvar(root, recommended_action, eval_tau);
-            if (std::isnan(estimated_action_cvar)) {
-                return metrics;
-            }
-
-            metrics.cvar_regret = std::abs(root_solution.optimal_cvar - estimated_action_cvar);
+            metrics.cvar_regret = root_solution.optimal_cvar - estimated_root_value;
             metrics.optimal_action_hit =
                 (metrics.cvar_regret <= optimal_action_regret_threshold + mcts::exp::kCvarTolerance) ? 1.0 : 0.0;
             return metrics;
